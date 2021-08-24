@@ -88,6 +88,7 @@ def getMetadata(file):
     access = 0
     modify = 0
     create = 0
+    mode = 777
     size = 0
     try:
         access = os.path.getatime(file)
@@ -102,10 +103,14 @@ def getMetadata(file):
     except:
         print('Cannot get file {} created time'.format(file))
     try:
+        mode = stat.S_IMODE(os.stat(file).st_mode)
+    except:
+        print('Cannot get file {} mode'.format(file))
+    try:
         size = os.path.getsize(file)
     except:
         print('Cannot get file {} size'.format(file))
-    return access, modify, create, size
+    return readableTime(access), readableTime(modify), readableTime(create), mode, size
 
 def readableTime(timestamp):
     return time.ctime(timestamp)
@@ -171,9 +176,20 @@ def filenameCheck(source, dest):
     else:
         return False
 
+def countFileFolder(folderpath):
+    totalFiles = 0
+    totalDirs = 0
+    for base, dirs, files in os.walk(folderpath):
+        for dir in dirs:
+            totalDirs += 1
+        for file in files:
+            totalFiles += 1
+    return totalFiles, totalDirs
+
 def move(source, dest, logs='moving_history.log', checksum='md5', **kwargs):
+    start_time = time.time()
     if 'logger' in kwargs and kwargs['logger'] != None:
-        kwargs['logger'].emit('[INIT] Read files in {}'.format(source))
+        kwargs['logger'].emit('Read files in {}'.format(source))
     lists = getSourceDestList(source, dest)
     size = len(lists)
     if 'progress' in kwargs and kwargs['progress']:
@@ -182,8 +198,8 @@ def move(source, dest, logs='moving_history.log', checksum='md5', **kwargs):
     if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
         kwargs['updateProgressQT'].emit(0)
     if 'logger' in kwargs and kwargs['logger'] != None:
-        kwargs['logger'].emit('[START] Copy {} file(s) from {} to {}'.format(size, source, dest))
-    log_line = 	['Status', 'Time', 'Source_path','Dest_path','Filename_check','Hash_method', 'Source_hash', 'Dest_hash','Hash_check','Source_modified_date','Dest_modified_date','Modified_check', 'Source_size', 'Dest_size', 'Size_check']
+        kwargs['logger'].emit('##############################')
+    log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_file_mode', 'Dest_file_mode', 'Source_modified_date', 'Dest_modified_date', 'Modified_check', 'Source_created_date', 'Dest_created_date', 'Source_accessed_date', 'Dest_accessed_date']
     file = open(logs, "w")
     writer = csv.writer(file, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
     writer.writerow(log_line)
@@ -193,26 +209,26 @@ def move(source, dest, logs='moving_history.log', checksum='md5', **kwargs):
             copy(lists[i]['source'], lists[i]['dest'])
             checksum1 = getFileHash(lists[i]['source'], checksum)
             checksum2 = getFileHash(lists[i]['dest'], checksum)
-            access1, modify1, create1, size1 = getMetadata(lists[i]['source'])
-            access2, modify2, create2, size2 = getMetadata(lists[i]['dest'])
+            access1, modify1, create1, mode1, size1 = getMetadata(lists[i]['source'])
+            access2, modify2, create2, mode2, size2 = getMetadata(lists[i]['dest'])
             if checksum1 == checksum2 and modify1 == modify2 and size1 == size2:
                 if 'logger' in kwargs and kwargs['logger'] != None:
-                    kwargs['logger'].emit('[SUCCESS] Copy {} to {}'.format(lists[i]['source'], lists[i]['dest']))
+                    kwargs['logger'].emit('{}'.format(extractPath(lists[i]['source'], source)))
                 else:
                     print('[SUCCESS] Copy {} to {}'.format(lists[i]['source'], lists[i]['dest']))
-                log_line = 	['SUCCES', t, lists[i]['source'], lists[i]['dest'], filenameCheck(lists[i]['source'], lists[i]['dest']), checksum, checksum1, checksum2, checksum1 == checksum2, modify1, modify2, modify1 == modify2, size1, size2, size1 == size2]
+                log_line = 	['SUCCES', t, lists[i]['source'], lists[i]['dest'], filenameCheck(lists[i]['source'], lists[i]['dest']), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
             else:
                 if 'logger' in kwargs and kwargs['logger'] != None:
-                    kwargs['logger'].emit('[FAILED] Copy {} to {}'.format(lists[i]['source'], lists[i]['dest']))
+                    kwargs['logger'].emit('{}'.format(extractPath(lists[i]['source'], source)))
                 else:
                     print('[FAILED] Copy {} to {}'.format(lists[i]['source'], lists[i]['dest']))
-                log_line = 	['FAILED', t, lists[i]['source'], lists[i]['dest'], filenameCheck(lists[i]['source'], lists[i]['dest']), checksum, checksum1, checksum2, checksum1 == checksum2, modify1, modify2, modify1 == modify2, size1, size2, size1 == size2]
+                log_line = 	['FAILED', t, lists[i]['source'], lists[i]['dest'], filenameCheck(lists[i]['source'], lists[i]['dest']), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
         except:
             if 'logger' in kwargs and kwargs['logger'] != None:
-                kwargs['logger'].emit('[FAILED] Copy {} to {}'.format(lists[i]['source'], lists[i]['dest']))
+                kwargs['logger'].emit('{}'.format(extractPath(lists[i]['source'], source)))
             else:
                 print('[FAILED] Copy {} to {}'.format(lists[i]['source'], lists[i]['dest']))
-            log_line = 	['FAILED', t, lists[i]['source'], lists[i]['dest'], filenameCheck(lists[i]['source'], lists[i]['dest']), '', '', '','','', '', '', '', '', '']
+            log_line = 	['FAILED', t, lists[i]['source'], lists[i]['dest'], filenameCheck(lists[i]['source'], lists[i]['dest']), '', '', '','','', '', '', '', '', '', '', '', '', '', '', '']
             pass
         writer.writerow(log_line)
         if 'progress' in kwargs and kwargs['progress']:
@@ -224,8 +240,23 @@ def move(source, dest, logs='moving_history.log', checksum='md5', **kwargs):
             shutil.rmtree(logs)
             break
     file.close()
+    end_time = time.time()
+    source_file_num, source_folder_num = countFileFolder(source)
+    dest_file_num, dest_folder_num = countFileFolder(source)
     if 'logger' in kwargs and kwargs['logger'] != None:
-        kwargs['logger'].emit('[DONE] Copy {} to {}'.format(source, dest))
+        kwargs['logger'].emit('##############################')
+        kwargs['logger'].emit('Summary')
+        kwargs['logger'].emit('Executed %.2f seconds' % (end_time - start_time))
+        kwargs['logger'].emit('Source files number {}'.format(source_file_num))
+        kwargs['logger'].emit('Dest files number {}'.format(dest_file_num))
+        kwargs['logger'].emit('Source folders number {}'.format(source_folder_num))
+        kwargs['logger'].emit('Dest folders number {}'.format(dest_folder_num))
+        kwargs['logger'].emit('Success to copy {} files'.format(len(success_files)))
+        kwargs['logger'].emit('Failed to copy {} files'.format(len(failed_files)))
+        if len(failed_files) > 0:
+            kwargs['logger'].emit('Failed files')
+            for item in failed_files:
+                kwargs['logger'].emit('   {}'.format(extractPath(item, source)))
     if 'progress' in kwargs and kwargs['progress']:
         bar.update(100)
         bar.finish()
