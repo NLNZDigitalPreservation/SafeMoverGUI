@@ -1,4 +1,4 @@
-import string, os, shutil, time, stat, platform, csv
+import string, os, shutil, time, stat, platform, csv, math
 from hashlib import md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s
 import progressbar
 
@@ -46,7 +46,10 @@ def getSourceDestList(source, dest):
     source_files = getListOfFiles(source)
     lists = []
     for item in source_files:
-        lists.append({'source': convertPath(item), 'dest': convertPath(illegal_chars_handler(string_cleaner(appendPath(extractPath(item, source), dest))))})
+        if item == source:
+            lists.append({'source': convertPath(item), 'dest': convertPath(illegal_chars_handler(string_cleaner(dest)))})
+        else:
+            lists.append({'source': convertPath(item), 'dest': convertPath(illegal_chars_handler(string_cleaner(appendPath(extractPath(item, source), dest))))})
     return lists
 
 def removeFromList(lists, item):
@@ -179,17 +182,30 @@ def filenameCheck(source, dest):
 def countFileFolder(folderpath):
     totalFiles = 0
     totalDirs = 0
+    totalSize = 0
     for base, dirs, files in os.walk(folderpath):
         for dir in dirs:
             totalDirs += 1
         for file in files:
             totalFiles += 1
-    return totalFiles, totalDirs
+            if not os.path.islink(os.path.join(base, file)):
+                totalSize += os.path.getsize(os.path.join(base, file))
+    return totalFiles, totalDirs, totalSize
+
+def getETA(t):
+    if t > 60:
+        return '{} min {} sec'.format(math.floor(t/60), t%60)
+    else:
+        return '{} sec'.format(t)
 
 def move(source, dest, logs='moving_history.log', checksum='md5', **kwargs):
     start_time = time.time()
     if 'logger' in kwargs and kwargs['logger'] != None:
         kwargs['logger'].emit('Read files in {}'.format(source))
+    if 'progressText' in kwargs and kwargs['progressText'] != None:
+            kwargs['progressText'].emit('Reading source file/folder ...')
+    if 'ETA' in kwargs and kwargs['ETA'] != None:
+        kwargs['ETA'].emit('- min')
     lists = getSourceDestList(source, dest)
     size = len(lists)
     if 'progress' in kwargs and kwargs['progress']:
@@ -199,12 +215,19 @@ def move(source, dest, logs='moving_history.log', checksum='md5', **kwargs):
         kwargs['updateProgressQT'].emit(0)
     if 'logger' in kwargs and kwargs['logger'] != None:
         kwargs['logger'].emit('##############################')
+    copy_speed = 250000000
+    source_file_num, source_folder_num, source_size = countFileFolder(source)
+    if 'ETA' in kwargs and kwargs['ETA'] != None:
+        kwargs['ETA'].emit(getETA(int(math.ceil(source_size/copy_speed))))
     log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_file_mode', 'Dest_file_mode', 'Source_modified_date', 'Dest_modified_date', 'Modified_check', 'Source_created_date', 'Dest_created_date', 'Source_accessed_date', 'Dest_accessed_date']
     file = open(logs, "w")
     writer = csv.writer(file, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
     writer.writerow(log_line)
+    totalsize = source_size
     for i in range(size):
         try:
+            if 'progressText' in kwargs and kwargs['progressText'] != None:
+                kwargs['progressText'].emit('[{}/{}] Copying {}'.format((i+1),size,lists[i]['source']))
             t = time.ctime()
             copy(lists[i]['source'], lists[i]['dest'])
             checksum1 = getFileHash(lists[i]['source'], checksum)
@@ -223,6 +246,9 @@ def move(source, dest, logs='moving_history.log', checksum='md5', **kwargs):
                 else:
                     print('[FAILED] Copy {} to {}'.format(lists[i]['source'], lists[i]['dest']))
                 log_line = 	['FAILED', t, lists[i]['source'], lists[i]['dest'], filenameCheck(lists[i]['source'], lists[i]['dest']), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
+            totalsize -= size1
+            if 'ETA' in kwargs and kwargs['ETA'] != None:
+                kwargs['ETA'].emit(getETA(int(math.ceil(totalsize/copy_speed))))
         except:
             if 'logger' in kwargs and kwargs['logger'] != None:
                 kwargs['logger'].emit('{}'.format(extractPath(lists[i]['source'], source)))
@@ -232,17 +258,17 @@ def move(source, dest, logs='moving_history.log', checksum='md5', **kwargs):
             pass
         writer.writerow(log_line)
         if 'progress' in kwargs and kwargs['progress']:
-            bar.update(int(i*100/size))
+            bar.update(int((i+1)*100/size))
         if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
-            kwargs['updateProgressQT'].emit(int(i*100/size))
+            kwargs['updateProgressQT'].emit(int((i+1)*100/size))
         if threadStop:
             shutil.rmtree(dest)
             shutil.rmtree(logs)
             break
     file.close()
     end_time = time.time()
-    source_file_num, source_folder_num = countFileFolder(source)
-    dest_file_num, dest_folder_num = countFileFolder(source)
+    
+    dest_file_num, dest_folder_num, dest_size = countFileFolder(source)
     if 'logger' in kwargs and kwargs['logger'] != None:
         kwargs['logger'].emit('##############################')
         kwargs['logger'].emit('Summary')

@@ -21,6 +21,8 @@ class MoverWorker(QObject):
     finished = pyqtSignal()
     progress = pyqtSignal(int)
     logger = pyqtSignal(object)
+    ETA = pyqtSignal(object)
+    progressText = pyqtSignal(object)
 
     def setParams(self, source, dest, logs, algo):
         self.source = source
@@ -30,7 +32,7 @@ class MoverWorker(QObject):
 
     def run(self):
         mover.terminate(False)
-        mover.move(self.source, self.dest, self.logs, self.algo, progress=False, updateProgressQT=self.progress, logger=self.logger)
+        mover.move(self.source, self.dest, self.logs, self.algo, progress=False, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
         self.finished.emit()
 
     def terminate(self):
@@ -49,7 +51,7 @@ class Window(QWidget):
 
         self.setWindowTitle('Safe Mover')
         self.setFixedWidth(580)
-        self.setFixedHeight(250)
+        self.setFixedHeight(260)
 
         self.algoSelector()
         self.SourceDestUI()
@@ -139,11 +141,21 @@ class Window(QWidget):
 
     def progressBar(self):
         self.pBar = QProgressBar(self)
-        self.pBar.setGeometry(10, 170, 240, 20)
+        self.pBar.setGeometry(10, 195, 240, 20)
         self.pBar.setStyleSheet("QProgressBar::chunk {background-color: green;}")
         self.pBar.setStyleSheet("QProgressBar {background-color: transparent; border: 1px solid grey; border-radius: 5px;}")
         self.pBar.setAlignment(Qt.AlignCenter)
         self.pBar.setVisible(False)
+
+        self.ETA = QLabel(self)
+        self.ETA.move(260, 195)
+        self.ETA.resize(120, 20)
+        self.ETA.setText('')
+
+        self.progressText = QLabel(self)
+        self.progressText.move(10, 165)
+        self.progressText.resize(560, 30)
+        self.progressText.setText('')
 
     def msgUI(self):
         self.msgLabel = QLabel(self)
@@ -155,8 +167,8 @@ class Window(QWidget):
     def copyUI(self):
         self.copyBtn = QPushButton(self)
         self.copyBtn.setText('Copy')
-        self.copyBtn.move(100, 200)
-        self.copyBtn.resize(60, 30)
+        self.copyBtn.move(100, 220)
+        self.copyBtn.resize(60, 26)
         self.copyBtn.clicked.connect(self.copyFolders)
 
     def iconFromBase64(self, base64):
@@ -259,14 +271,20 @@ class Window(QWidget):
     def switchAlgo(self):
         self.selected_algo = self.algo[self.algoCombo.currentIndex()]
 
-    def copyFlagFalse(self):
-        self.copyFlag = False
+    def setCopyFlag(self, value):
+        self.copyFlag = value
 
     def progressUpdate(self, value):
         self.pBar.setValue(value)
 
     def loggerHandler(self, value):
         self.log_text_box.appendPlainText(value)
+
+    def ETAUpdate(self, value):
+        self.ETA.setText('ETA: '+str(value))
+    
+    def progressTextUpdate(self, value):
+        self.progressText.setText(str(value))
 
     def copyFolders(self):
         if self.copyFlag:
@@ -275,7 +293,8 @@ class Window(QWidget):
             self.copyFlag = False
             if self.msgWorker:
                 self.msgWorker.terminate()
-                self.loggerHandler('[TERMINATE] Operation stopped by user')
+                self.ETA.setText('')
+                self.progressText.setText('')
         else:
             if self.sourcePath != '' and (os.path.isdir(self.sourcePath) or os.path.isfile(self.sourcePath)) and self.destPath != '' and self.logsPath != '':
                 
@@ -289,6 +308,8 @@ class Window(QWidget):
                 self.msgThread.finished.connect(self.msgThread.deleteLater)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)
+                self.msgWorker.ETA.connect(self.ETAUpdate)
+                self.msgWorker.progressText.connect(self.progressTextUpdate)
                 self.msgThread.start()
 
                 self.copyBtn.setText('Cancel')
@@ -296,9 +317,11 @@ class Window(QWidget):
                 self.copyFlag = True
                 self.log_text_box.clear()
 
+                self.msgThread.finished.connect(lambda: self.setCopyFlag(False))
                 self.msgThread.finished.connect(lambda: self.copyBtn.setText('Copy'))
                 self.msgThread.finished.connect(lambda: self.pBar.setVisible(False))
-                self.msgThread.finished.connect(lambda: self.copyFlagFalse)
+                self.msgThread.finished.connect(lambda: self.ETA.setText(''))
+                self.msgThread.finished.connect(lambda: self.progressText.setText(''))
 
             else:
                 self.msgThread = QThread()
