@@ -6,10 +6,15 @@
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install necessary packages. 
 
 ```bash
-pip install progressbar PyQt5
+pip install progressbar2 PyQt5
 ```
 ![image](img/pip_install_package.png)
 ## Usage
+### With command line
+`python3 mover.py source=<source path> dest=<dest path> logs=<log file> checksum=<checksum>`
+- If path contains space, add `\`(unix) or `/`(windows) before space.
+- Available checksume algorithms: md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s.
+### With GUI
 - Double click `SafeMoverGUI.py` to open as python application. 
 - Choose checksum method.
 - Input path or click folder icon 📁 to select source/dest/logs folder/file. 
@@ -24,7 +29,7 @@ You can open log.csv to review the details of the moving records.
 - On/Off - filename cleaning (currently on)
 - On/Off - exclude files
 - Multithread moving files
-- Retry when failed
+- ~~Retry when failed~~
 - Deploy mover.py into Pypi, then SafeMoverGUI.py can run independently
 - Identify duplication
 
