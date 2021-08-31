@@ -39,4 +39,4 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 Please make sure to update tests as appropriate.
 
 ## License
-[MIT](https://choosealicense.com/licenses/mit/)
+[GNU General Public License v2.0](https://choosealicense.com/licenses/gpl-2.0/)
