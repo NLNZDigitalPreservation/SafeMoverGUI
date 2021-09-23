@@ -267,7 +267,7 @@ def move(source, dest, logs='logs.csv', checksum='md5', **kwargs):
         kwargs['updateProgressQT'].emit(0)
     if 'logger' in kwargs and kwargs['logger'] != None:
         kwargs['logger'].emit('######################')
-    copy_speed = 200000000
+
     source_file_num, source_folder_num = countFileFolder(source)
 
     log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_file_permission', 'Dest_file_permission', 'Source_modified_date', 'Dest_modified_date', 'Modified_check', 'Source_created_date', 'Dest_created_date', 'Source_accessed_date', 'Dest_accessed_date']
@@ -305,6 +305,7 @@ def move(source, dest, logs='logs.csv', checksum='md5', **kwargs):
             # shutil.rmtree(dest)
             # shutil.rmtree(logs)
             break
+
     global failed_files
     retry = 3
     while len(failed_files) > 0 and retry > 0:
