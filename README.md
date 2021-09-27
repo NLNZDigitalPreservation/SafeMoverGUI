@@ -6,9 +6,9 @@
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install necessary packages. 
 
 ```bash
-pip install progressbar2 PyQt5
+pip install tqdm PyQt5
 ```
-![image](img/pip_install_package.png)
+![image](img/package.png)
 ## Usage
 ### With command line
 `python3 mover.py source=<source path> dest=<dest path> logs=<log file> checksum=<checksum>`

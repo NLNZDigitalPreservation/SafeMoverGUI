@@ -16,13 +16,25 @@ class Worker(QObject):
         time.sleep(self.delay)
         self.finished.emit()
 
-class MoverWorker(QObject):
-
+class WorkerSignals(QObject):
     finished = pyqtSignal()
     progress = pyqtSignal(int)
     logger = pyqtSignal(object)
     ETA = pyqtSignal(object)
     progressText = pyqtSignal(object)
+
+class MoverWorker(QThread):
+
+    def __init__(self, *args, **kwargs):
+        super(MoverWorker, self).__init__()
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+        self.finished = self.signals.finished
+        self.progress = self.signals.progress
+        self.logger = self.signals.logger
+        self.ETA = self.signals.ETA
+        self.progressText = self.signals.progressText
 
     def setParams(self, source, dest, logs, algo):
         self.source = source
@@ -30,6 +42,7 @@ class MoverWorker(QObject):
         self.logs = logs
         self.algo = algo
 
+    @pyqtSlot()
     def run(self):
         mover.terminate(False)
         mover.move(self.source, self.dest, self.logs, self.algo, progress=False, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
@@ -286,6 +299,14 @@ class Window(QWidget):
     def progressTextUpdate(self, value):
         self.progressText.setText(str(value))
 
+    def finishWorker(self):
+        self.setCopyFlag(False)
+        self.copyBtn.setText('Copy')
+        self.pBar.setVisible(False)
+        self.ETA.setText('')
+        self.progressText.setText('')
+        self.msgWorker.quit()
+
     def copyFolders(self):
         if self.copyFlag:
             self.copyBtn.setText('Copy')
@@ -298,30 +319,20 @@ class Window(QWidget):
         else:
             if self.sourcePath != '' and (os.path.isdir(self.sourcePath) or os.path.isfile(self.sourcePath)) and self.destPath != '' and self.logsPath != '':
                 
-                self.msgThread = QThread()
                 self.msgWorker = MoverWorker()
                 self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo)
-                self.msgWorker.moveToThread(self.msgThread)
-                self.msgThread.started.connect(self.msgWorker.run)
-                self.msgWorker.finished.connect(self.msgThread.quit)
-                self.msgWorker.finished.connect(self.msgWorker.deleteLater)
-                self.msgThread.finished.connect(self.msgThread.deleteLater)
+                self.msgWorker.finished.connect(self.finishWorker)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)
                 self.msgWorker.ETA.connect(self.ETAUpdate)
                 self.msgWorker.progressText.connect(self.progressTextUpdate)
-                self.msgThread.start()
-
+                
                 self.copyBtn.setText('Cancel')
                 self.pBar.setVisible(True)
                 self.copyFlag = True
                 self.log_text_box.clear()
 
-                self.msgThread.finished.connect(lambda: self.setCopyFlag(False))
-                self.msgThread.finished.connect(lambda: self.copyBtn.setText('Copy'))
-                self.msgThread.finished.connect(lambda: self.pBar.setVisible(False))
-                self.msgThread.finished.connect(lambda: self.ETA.setText(''))
-                self.msgThread.finished.connect(lambda: self.progressText.setText(''))
+                self.msgWorker.start()
 
             else:
                 self.msgThread = QThread()
