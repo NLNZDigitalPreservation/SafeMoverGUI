@@ -1,12 +1,10 @@
 from posixpath import realpath
 import sys, string, os, shutil, time, stat, platform, csv, math
 from hashlib import md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s
-import progressbar
 from tqdm import tqdm
 
 success_files = []
 failed_files = []
-bar = progressbar.ProgressBar(maxval=100, redirect_stdout=True, widgets=[progressbar.Bar('=','[',']'), ' ', progressbar.Percentage()])
 threadStop = False
 
 def string_cleaner(original_str):
@@ -260,9 +258,6 @@ def move(source, dest, logs='logs.csv', checksum='md5', **kwargs):
         kwargs['ETA'].emit('-')
     lists = getSourceDestList(source, dest)
     size = len(lists)
-    if 'progress' in kwargs and kwargs['progress']:
-        bar.start()
-        bar.update(0)
     if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
         kwargs['updateProgressQT'].emit(0)
     if 'logger' in kwargs and kwargs['logger'] != None:
@@ -286,8 +281,6 @@ def move(source, dest, logs='logs.csv', checksum='md5', **kwargs):
         if len(s) > 4:
             count = int(s[2].split('/')[0])
             remaining = s[3].split('<')[1][:-1]
-            if 'progress' in kwargs and kwargs['progress']:
-                bar.update(int((count)*100/size))
             if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
                 kwargs['updateProgressQT'].emit(int((count)*100/size))
             if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
@@ -295,8 +288,6 @@ def move(source, dest, logs='logs.csv', checksum='md5', **kwargs):
         elif len(s) == 4:
             count = int(s[1].split('/')[0])
             remaining = s[2].split('<')[1][:-1]
-            if 'progress' in kwargs and kwargs['progress']:
-                bar.update(int((count)*100/size))
             if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
                 kwargs['updateProgressQT'].emit(int((count)*100/size))
             if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
@@ -330,8 +321,6 @@ def move(source, dest, logs='logs.csv', checksum='md5', **kwargs):
             if len(s) > 4:
                 count = int(s[2].split('/')[0])
                 remaining = s[3].split('<')[1][:-1]
-                if 'progress' in kwargs and kwargs['progress']:
-                    bar.update(int((count)*100/size))
                 if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
                     kwargs['updateProgressQT'].emit(int((count)*100/size))
                 if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
@@ -339,8 +328,6 @@ def move(source, dest, logs='logs.csv', checksum='md5', **kwargs):
             elif len(s) == 4:
                 count = int(s[1].split('/')[0])
                 remaining = s[2].split('<')[1][:-1]
-                if 'progress' in kwargs and kwargs['progress']:
-                    bar.update(int((count)*100/size))
                 if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
                     kwargs['updateProgressQT'].emit(int((count)*100/size))
                 if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
@@ -369,9 +356,6 @@ def move(source, dest, logs='logs.csv', checksum='md5', **kwargs):
             kwargs['logger'].emit('Failed files:')
             for item in failed_files:
                 kwargs['logger'].emit('   {}'.format(transformText(extractPath(item, source), 24)))
-    if 'progress' in kwargs and kwargs['progress']:
-        bar.update(100)
-        bar.finish()
     if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
         kwargs['updateProgressQT'].emit(100)
     if 'logger' not in kwargs:
@@ -391,4 +375,4 @@ if __name__ == '__main__':
             commands[params[0]] = params[1]
         except Exception as e:
             print(e)
-    move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], progress=commands['progress'])
+    move(commands['source'], commands['dest'], commands['logs'], commands['checksum'])
