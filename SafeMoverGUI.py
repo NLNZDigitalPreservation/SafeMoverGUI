@@ -39,21 +39,26 @@ class MoverWorker(QThread):
         self.logger = self.signals.logger
         self.ETA = self.signals.ETA
         self.progressText = self.signals.progressText
+        self.checkDuplicate = False
+        self.rmDuplicate = False
+        self.mover = mover.Mover()
 
-    def setParams(self, source, dest, logs, algo):
+    def setParams(self, source, dest, logs, algo, checkDuplicate, rmDuplicate):
         self.source = source
         self.dest = dest
         self.logs = logs
         self.algo = algo
+        self.checkDuplicate = checkDuplicate
+        self.rmDuplicate = rmDuplicate
 
     @pyqtSlot()
     def run(self):
-        mover.terminate(False)
-        mover.move(self.source, self.dest, self.logs, self.algo, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
+        self.mover.terminate(False)
+        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rmDuplicate, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
         self.finished.emit()
 
     def terminate(self):
-        mover.terminate(True)
+        self.mover.terminate(True)
 
 class Window(QWidget):
     def __init__(self):
@@ -70,17 +75,18 @@ class Window(QWidget):
 
         self.setWindowTitle('Safe Mover')
         self.setFixedWidth(580)
-        self.setFixedHeight(260)
+        self.setFixedHeight(280)
 
         self.algoSelector()
         self.SourceDestUI()
+        self.duplicateUI()
         self.logsUI()
         self.progressBar()
         self.msgUI()
         self.copyUI()
 
     def algoSelector(self):
-        self.algo = mover.getAlgo()
+        self.algo = mover.Mover().getAlgo()
         self.selected_algo = 'md5'
         self.algoLabel = QLabel('Checksum', self)
         self.algoLabel.move(10, 10)
@@ -130,8 +136,22 @@ class Window(QWidget):
         self.openDestBtn.move(265, 90)
         self.openDestBtn.resize(30, 30)
 
+    def duplicateUI(self):
+        self.dupliLabel = QLabel('Duplication', self)
+        self.dupliLabel.move(10, 160)
+        self.dupliLabel.resize(80,26)
+
+        self.d1 = QCheckBox("Identify", self)
+        self.d1.setChecked(True)
+        self.d1.move(100, 160)
+        self.d1.resize(80,26)
+
+        self.d2 = QCheckBox("Keep Only One", self)
+        self.d2.move(170, 160)
+        self.d2.resize(120,26)
+
     def logsUI(self):
-        self.logsPath = mover.convertPath(os.getcwd()+'/logs.csv')
+        self.logsPath = mover.Mover().convertPath(os.getcwd()+'/logs.csv')
         self.logsLabel = QLabel('Logs', self)
         self.logsLabel.move(10, 130)
         self.logsLabel.resize(80,30)
@@ -160,25 +180,25 @@ class Window(QWidget):
 
     def progressBar(self):
         self.pBar = QProgressBar(self)
-        self.pBar.setGeometry(10, 195, 240, 20)
+        self.pBar.setGeometry(10, 205, 240, 20)
         self.pBar.setStyleSheet("QProgressBar::chunk {background-color: green;}")
         self.pBar.setStyleSheet("QProgressBar {background-color: transparent; border: 1px solid grey; border-radius: 5px;}")
         self.pBar.setAlignment(Qt.AlignCenter)
         self.pBar.setVisible(False)
 
         self.ETA = QLabel(self)
-        self.ETA.move(260, 195)
+        self.ETA.move(260, 205)
         self.ETA.resize(120, 20)
         self.ETA.setText('')
 
         self.progressText = QLabel(self)
-        self.progressText.move(10, 165)
+        self.progressText.move(10, 175)
         self.progressText.resize(560, 30)
         self.progressText.setText('')
 
     def msgUI(self):
         self.msgLabel = QLabel(self)
-        self.msgLabel.move(10, 170)
+        self.msgLabel.move(10, 180)
         self.msgLabel.resize(260,30)
         self.msgLabel.setAlignment(Qt.AlignCenter)
         self.msgLabel.setVisible(False)
@@ -186,7 +206,7 @@ class Window(QWidget):
     def copyUI(self):
         self.copyBtn = QPushButton(self)
         self.copyBtn.setText('Copy')
-        self.copyBtn.move(100, 220)
+        self.copyBtn.move(100, 230)
         self.copyBtn.resize(60, 26)
         self.copyBtn.clicked.connect(self.copyFolders)
 
@@ -209,7 +229,7 @@ class Window(QWidget):
         self.sourcePath = self.getOpenFilesAndDirs()
         if len(self.sourcePath) > 0:
             self.sourcePath = self.sourcePath[0]
-            self.sourceInput.setText(mover.convertPath(self.sourcePath))
+            self.sourceInput.setText(mover.Mover().convertPath(self.sourcePath))
 
     def sourceOpen(self):
         if self.sourcePath != '':
@@ -226,7 +246,7 @@ class Window(QWidget):
         self.destPath = self.getOpenFilesAndDirs()
         if len(self.destPath) > 0:
             self.destPath = self.destPath[0]
-            self.destInput.setText(mover.convertPath(self.destPath))
+            self.destInput.setText(mover.Mover().convertPath(self.destPath))
 
     def destOpen(self):
         if self.destPath != '':
@@ -243,9 +263,9 @@ class Window(QWidget):
         self.logsPath = self.getOpenFilesAndDirs()
         if len(self.logsPath) > 0:
             self.logsPath = self.logsPath[0]
-            if os.path.isdir(mover.convertPath(self.logsPath)):
+            if os.path.isdir(mover.Mover().convertPath(self.logsPath)):
                 self.logsPath += '/log.csv' 
-            self.logsInput.setText(mover.convertPath(self.logsPath))
+            self.logsInput.setText(mover.Mover().convertPath(self.logsPath))
     
     def logsOpen(self):
         if self.logsPath != '':
@@ -331,9 +351,9 @@ class Window(QWidget):
                 if self.msgWorker:
                     self.msgWorker.quit()
                     self.msgWorker = None
-                    
+
                 self.msgWorker = MoverWorker(self)
-                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo)
+                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked())
                 self.msgWorker.finished.connect(self.finishMoverWorker)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)

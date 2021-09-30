@@ -31,7 +31,7 @@ You can open log.csv to review the details of the moving records.
 - Multithread moving files
 - ~~Retry when failed~~
 - Deploy mover.py into Pypi, then SafeMoverGUI.py can run independently
-- Identify duplication
+- ~~Identify duplication~~
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
