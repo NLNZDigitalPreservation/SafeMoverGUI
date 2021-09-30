@@ -4,14 +4,19 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 import mover
 
-class Worker(QObject):
+class Worker(QThread):
 
-    delay = 3
-    finished = pyqtSignal()
+    def __init__(self, parent):
+        super(Worker, self).__init__()
+
+        self.signals = WorkerSignals()
+        self.finished = self.signals.finished
+        self.delay = 3
 
     def setDelay(self, delay):
         self.delay = delay 
 
+    @pyqtSlot()
     def run(self):
         time.sleep(self.delay)
         self.finished.emit()
@@ -25,31 +30,35 @@ class WorkerSignals(QObject):
 
 class MoverWorker(QThread):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, parent):
         super(MoverWorker, self).__init__()
-        self.args = args
-        self.kwargs = kwargs
+
         self.signals = WorkerSignals()
         self.finished = self.signals.finished
         self.progress = self.signals.progress
         self.logger = self.signals.logger
         self.ETA = self.signals.ETA
         self.progressText = self.signals.progressText
+        self.checkDuplicate = False
+        self.rmDuplicate = False
+        self.mover = mover.Mover()
 
-    def setParams(self, source, dest, logs, algo):
+    def setParams(self, source, dest, logs, algo, checkDuplicate, rmDuplicate):
         self.source = source
         self.dest = dest
         self.logs = logs
         self.algo = algo
+        self.checkDuplicate = checkDuplicate
+        self.rmDuplicate = rmDuplicate
 
     @pyqtSlot()
     def run(self):
-        mover.terminate(False)
-        mover.move(self.source, self.dest, self.logs, self.algo, progress=False, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
+        self.mover.terminate(False)
+        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rmDuplicate, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
         self.finished.emit()
 
     def terminate(self):
-        mover.terminate(True)
+        self.mover.terminate(True)
 
 class Window(QWidget):
     def __init__(self):
@@ -62,19 +71,22 @@ class Window(QWidget):
         self.icon_file = b'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'
         self.icon_folder = b'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'
 
+        self.msgWorker = None
+
         self.setWindowTitle('Safe Mover')
         self.setFixedWidth(580)
-        self.setFixedHeight(260)
+        self.setFixedHeight(280)
 
         self.algoSelector()
         self.SourceDestUI()
+        self.duplicateUI()
         self.logsUI()
         self.progressBar()
         self.msgUI()
         self.copyUI()
 
     def algoSelector(self):
-        self.algo = mover.getAlgo()
+        self.algo = mover.Mover().getAlgo()
         self.selected_algo = 'md5'
         self.algoLabel = QLabel('Checksum', self)
         self.algoLabel.move(10, 10)
@@ -124,8 +136,22 @@ class Window(QWidget):
         self.openDestBtn.move(265, 90)
         self.openDestBtn.resize(30, 30)
 
+    def duplicateUI(self):
+        self.dupliLabel = QLabel('Duplication', self)
+        self.dupliLabel.move(10, 160)
+        self.dupliLabel.resize(80,26)
+
+        self.d1 = QCheckBox("Identify", self)
+        self.d1.setChecked(True)
+        self.d1.move(100, 160)
+        self.d1.resize(80,26)
+
+        self.d2 = QCheckBox("Keep Only One", self)
+        self.d2.move(170, 160)
+        self.d2.resize(120,26)
+
     def logsUI(self):
-        self.logsPath = mover.convertPath(os.getcwd()+'/logs.csv')
+        self.logsPath = mover.Mover().convertPath(os.getcwd()+'/logs.csv')
         self.logsLabel = QLabel('Logs', self)
         self.logsLabel.move(10, 130)
         self.logsLabel.resize(80,30)
@@ -154,25 +180,25 @@ class Window(QWidget):
 
     def progressBar(self):
         self.pBar = QProgressBar(self)
-        self.pBar.setGeometry(10, 195, 240, 20)
+        self.pBar.setGeometry(10, 205, 240, 20)
         self.pBar.setStyleSheet("QProgressBar::chunk {background-color: green;}")
         self.pBar.setStyleSheet("QProgressBar {background-color: transparent; border: 1px solid grey; border-radius: 5px;}")
         self.pBar.setAlignment(Qt.AlignCenter)
         self.pBar.setVisible(False)
 
         self.ETA = QLabel(self)
-        self.ETA.move(260, 195)
+        self.ETA.move(260, 205)
         self.ETA.resize(120, 20)
         self.ETA.setText('')
 
         self.progressText = QLabel(self)
-        self.progressText.move(10, 165)
+        self.progressText.move(10, 175)
         self.progressText.resize(560, 30)
         self.progressText.setText('')
 
     def msgUI(self):
         self.msgLabel = QLabel(self)
-        self.msgLabel.move(10, 170)
+        self.msgLabel.move(10, 180)
         self.msgLabel.resize(260,30)
         self.msgLabel.setAlignment(Qt.AlignCenter)
         self.msgLabel.setVisible(False)
@@ -180,7 +206,7 @@ class Window(QWidget):
     def copyUI(self):
         self.copyBtn = QPushButton(self)
         self.copyBtn.setText('Copy')
-        self.copyBtn.move(100, 220)
+        self.copyBtn.move(100, 230)
         self.copyBtn.resize(60, 26)
         self.copyBtn.clicked.connect(self.copyFolders)
 
@@ -203,7 +229,7 @@ class Window(QWidget):
         self.sourcePath = self.getOpenFilesAndDirs()
         if len(self.sourcePath) > 0:
             self.sourcePath = self.sourcePath[0]
-            self.sourceInput.setText(mover.convertPath(self.sourcePath))
+            self.sourceInput.setText(mover.Mover().convertPath(self.sourcePath))
 
     def sourceOpen(self):
         if self.sourcePath != '':
@@ -220,7 +246,7 @@ class Window(QWidget):
         self.destPath = self.getOpenFilesAndDirs()
         if len(self.destPath) > 0:
             self.destPath = self.destPath[0]
-            self.destInput.setText(mover.convertPath(self.destPath))
+            self.destInput.setText(mover.Mover().convertPath(self.destPath))
 
     def destOpen(self):
         if self.destPath != '':
@@ -237,9 +263,9 @@ class Window(QWidget):
         self.logsPath = self.getOpenFilesAndDirs()
         if len(self.logsPath) > 0:
             self.logsPath = self.logsPath[0]
-            if os.path.isdir(mover.convertPath(self.logsPath)):
+            if os.path.isdir(mover.Mover().convertPath(self.logsPath)):
                 self.logsPath += '/log.csv' 
-            self.logsInput.setText(mover.convertPath(self.logsPath))
+            self.logsInput.setText(mover.Mover().convertPath(self.logsPath))
     
     def logsOpen(self):
         if self.logsPath != '':
@@ -299,13 +325,17 @@ class Window(QWidget):
     def progressTextUpdate(self, value):
         self.progressText.setText(str(value))
 
-    def finishWorker(self):
+    def finishMoverWorker(self):
         self.setCopyFlag(False)
         self.copyBtn.setText('Copy')
         self.pBar.setVisible(False)
         self.ETA.setText('')
         self.progressText.setText('')
         self.msgWorker.quit()
+
+    def finishWorker(self):
+        self.msgLabel.setVisible(False)
+        self.msgLabel.setText('')
 
     def copyFolders(self):
         if self.copyFlag:
@@ -318,10 +348,13 @@ class Window(QWidget):
                 self.progressText.setText('')
         else:
             if self.sourcePath != '' and (os.path.isdir(self.sourcePath) or os.path.isfile(self.sourcePath)) and self.destPath != '' and self.logsPath != '':
-                
-                self.msgWorker = MoverWorker()
-                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo)
-                self.msgWorker.finished.connect(self.finishWorker)
+                if self.msgWorker:
+                    self.msgWorker.quit()
+                    self.msgWorker = None
+
+                self.msgWorker = MoverWorker(self)
+                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked())
+                self.msgWorker.finished.connect(self.finishMoverWorker)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)
                 self.msgWorker.ETA.connect(self.ETAUpdate)
@@ -335,21 +368,19 @@ class Window(QWidget):
                 self.msgWorker.start()
 
             else:
-                self.msgThread = QThread()
-                self.msgWorker = Worker()
-                self.msgWorker.moveToThread(self.msgThread)
-                self.msgThread.started.connect(self.msgWorker.run)
-                self.msgWorker.finished.connect(self.msgThread.quit)
-                self.msgWorker.finished.connect(self.msgWorker.deleteLater)
-                self.msgThread.finished.connect(self.msgThread.deleteLater)
-                self.msgThread.start()
+                if self.msgWorker:
+                    self.msgWorker.quit()
+                    self.msgWorker = None
+
+                self.msgWorker = Worker(self)
+                self.msgWorker.setDelay(5)
+                self.msgWorker.finished.connect(self.finishWorker)
 
                 self.msgLabel.setText('Please select correct folders/files')
                 self.msgLabel.setStyleSheet('color: red;')
                 self.msgLabel.setVisible(True)
-                
-                self.msgThread.finished.connect(lambda: self.msgLabel.setVisible(False))
-                self.msgThread.finished.connect(lambda: self.msgLabel.setText(''))
+
+                self.msgWorker.start()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
