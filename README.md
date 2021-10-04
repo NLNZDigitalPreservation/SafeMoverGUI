@@ -26,7 +26,7 @@ You can open log.csv to review the details of the moving records.
 ![image](img/FileStructure.png)
 
 ## Todo
-- On/Off - filename cleaning (currently on)
+- ~~On/Off - filename cleaning (currently on)~~
 - On/Off - exclude files
 - Multithread moving files
 - ~~Retry when failed~~
