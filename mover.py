@@ -45,23 +45,35 @@ class Mover():
             p = originalPath
         return p
 
-    def getSourceDestList(self, source, dest):
+    def getSourceDestList(self, source, dest, rename):
         source_files = self.getListOfFiles(source)
         lists = []
         for item in source_files:
             if item == source:
-                lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.illegal_chars_handler(self.string_cleaner(dest)))})
+                if rename:
+                    lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.illegal_chars_handler(self.string_cleaner(dest)))})
+                else:
+                    lists.append({'source': self.convertPath(item), 'dest': self.convertPath(dest)})
             else:
-                lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.illegal_chars_handler(self.string_cleaner(self.appendPath(self.extractPath(item, source), dest))))})
+                if rename:
+                    lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.illegal_chars_handler(self.string_cleaner(self.appendPath(self.extractPath(item, source), dest))))})
+                else:
+                    lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.appendPath(self.extractPath(item, source), dest))})
         return lists
 
-    def getFailedList(self, failed_lists, source, dest):
+    def getFailedList(self, failed_lists, source, dest, rename):
         lists = []
         for item in failed_lists:
             if item == source:
-                lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.illegal_chars_handler(self.string_cleaner(dest)))})
+                if rename:
+                    lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.illegal_chars_handler(self.string_cleaner(dest)))})
+                else:
+                    lists.append({'source': self.convertPath(item), 'dest': self.convertPath(dest)})
             else:
-                lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.illegal_chars_handler(self.string_cleaner(self.appendPath(self.extractPath(item, source), dest))))})
+                if rename:
+                    lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.illegal_chars_handler(self.string_cleaner(self.appendPath(self.extractPath(item, source), dest))))})
+                else:
+                    lists.append({'source': self.convertPath(item), 'dest': self.convertPath(self.appendPath(self.extractPath(item, source), dest))})
         return lists
 
     def removeFromList(self, lists, item):
@@ -245,8 +257,8 @@ class Mover():
                 access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
                 if checksum1 == checksum2 and modify1 == modify2 and size1 == size2:
                     if QT:
-                        QTlogger = self.transformText('{}'.format(extractPath(source, sourcePath)), 28)
-                    log_line = 	['SUCCES', t, source, dest, filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
+                        QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
+                    log_line = 	['SUCCES', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
                     self.hash_list.append({'source':source, 'hash':checksum1})
                 else:
                     if QT:
@@ -259,7 +271,7 @@ class Mover():
             pass
         return (QTprogressText, QTlogger, log_line, duplicate_log)
 
-    def move(self, source, dest, logs='logs.csv', checksum='md5', checkDuplicate=False, rmDuplicate=False, **kwargs):
+    def move(self, source, dest, logs='logs.csv', checksum='md5', checkDuplicate=False, rmDuplicate=False, rename=True, **kwargs):
         self.success_files = []
         self.failed_files = []
         self.hash_list = []
@@ -279,7 +291,7 @@ class Mover():
         if 'ETA' in kwargs and kwargs['ETA'] != None:
             kwargs['ETA'].emit('-')
             QT = True
-        lists = self.getSourceDestList(source, dest)
+        lists = self.getSourceDestList(source, dest, rename)
         size = len(lists)
         if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
             kwargs['updateProgressQT'].emit(0)
@@ -333,7 +345,7 @@ class Mover():
                 print('Retry {} time(s) copy failed files again ...'.format((4-retry)))
             if 'ETA' in kwargs and kwargs['ETA'] != None:
                 kwargs['ETA'].emit('-')
-            lists = self.getFailedList(self.failed_files, source, dest)
+            lists = self.getFailedList(self.failed_files, source, dest, rename)
             self.failed_files = []
             size = len(lists)
             t = tqdm(map(self.copyFile, [(lists[i]['source'], lists[i]['dest'], checksum, source, QT, checkDuplicate, rmDuplicate) for i in range(size)]), total=size)
@@ -405,7 +417,7 @@ class Mover():
                 print('   {}'.format(self.transformText(self.extractPath(item, source), 48)))
 
 if __name__ == '__main__':
-    commands = {'source': '', 'dest': '', 'logs': 'logs.csv', 'checksum': 'md5', 'checkDuplicate': False, 'rmDuplicate': False}
+    commands = {'source': '', 'dest': '', 'logs': 'logs.csv', 'checksum': 'md5', 'checkDuplicate': False, 'rmDuplicate': False, 'rename': True}
     for i in range(len(sys.argv)-1):
         try:
             params = sys.argv[i+1].split('=', 1)
@@ -413,4 +425,4 @@ if __name__ == '__main__':
         except Exception as e:
             print(e)
     mover = Mover()
-    mover.move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], commands['checkDuplicate'], commands['rmDuplicate'])
+    mover.move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], commands['checkDuplicate'], commands['rmDuplicate'], commands['rename'])

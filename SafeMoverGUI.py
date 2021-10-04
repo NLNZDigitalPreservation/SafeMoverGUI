@@ -41,20 +41,25 @@ class MoverWorker(QThread):
         self.progressText = self.signals.progressText
         self.checkDuplicate = False
         self.rmDuplicate = False
+        self.rename = True
         self.mover = mover.Mover()
 
-    def setParams(self, source, dest, logs, algo, checkDuplicate, rmDuplicate):
+    def setParams(self, source, dest, logs, algo, checkDuplicate, rmDuplicate, autoRename, disRename):
         self.source = source
         self.dest = dest
         self.logs = logs
         self.algo = algo
         self.checkDuplicate = checkDuplicate
         self.rmDuplicate = rmDuplicate
+        if autoRename:
+            self.rename = True
+        if disRename:
+            self.rename = False
 
     @pyqtSlot()
     def run(self):
         self.mover.terminate(False)
-        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rmDuplicate, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
+        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rmDuplicate, self.rename, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
         self.finished.emit()
 
     def terminate(self):
@@ -75,11 +80,12 @@ class Window(QWidget):
 
         self.setWindowTitle('Safe Mover')
         self.setFixedWidth(580)
-        self.setFixedHeight(280)
+        self.setFixedHeight(320)
 
         self.algoSelector()
         self.SourceDestUI()
         self.duplicateUI()
+        self.nameCleanUI()
         self.logsUI()
         self.progressBar()
         self.msgUI()
@@ -138,17 +144,37 @@ class Window(QWidget):
 
     def duplicateUI(self):
         self.dupliLabel = QLabel('Duplication', self)
-        self.dupliLabel.move(10, 160)
+        self.dupliLabel.move(10, 165)
         self.dupliLabel.resize(80,26)
 
         self.d1 = QCheckBox("Identify", self)
         self.d1.setChecked(True)
-        self.d1.move(100, 160)
+        self.d1.move(100, 165)
         self.d1.resize(80,26)
 
         self.d2 = QCheckBox("Keep Only One", self)
-        self.d2.move(170, 160)
-        self.d2.resize(120,26)
+        self.d2.move(175, 165)
+        self.d2.resize(130,26)
+
+    def nameCleanUI(self):
+        self.cleanLabel = QLabel('Rename', self)
+        self.cleanLabel.move(10, 190)
+        self.cleanLabel.resize(80, 26)
+
+        self.autoCleanBtn = QRadioButton(self)
+        self.autoCleanBtn.setText('Auto')
+        self.autoCleanBtn.setChecked(True)
+        self.autoCleanBtn.move(100, 190)
+        self.autoCleanBtn.resize(60, 30)
+
+        self.disCleanBtn = QRadioButton(self)
+        self.disCleanBtn.setText('Disabled')
+        self.disCleanBtn.move(175, 190)
+        self.disCleanBtn.resize(100, 30)
+
+        self.cleanBtnGrp = QButtonGroup(self)
+        self.cleanBtnGrp.addButton(self.autoCleanBtn, 1)
+        self.cleanBtnGrp.addButton(self.disCleanBtn, 2)        
 
     def logsUI(self):
         self.logsPath = mover.Mover().convertPath(os.getcwd()+'/logs.csv')
@@ -180,25 +206,25 @@ class Window(QWidget):
 
     def progressBar(self):
         self.pBar = QProgressBar(self)
-        self.pBar.setGeometry(10, 205, 240, 20)
+        self.pBar.setGeometry(10, 245, 240, 20)
         self.pBar.setStyleSheet("QProgressBar::chunk {background-color: green;}")
         self.pBar.setStyleSheet("QProgressBar {background-color: transparent; border: 1px solid grey; border-radius: 5px;}")
         self.pBar.setAlignment(Qt.AlignCenter)
         self.pBar.setVisible(False)
 
         self.ETA = QLabel(self)
-        self.ETA.move(260, 205)
+        self.ETA.move(260, 245)
         self.ETA.resize(120, 20)
         self.ETA.setText('')
 
         self.progressText = QLabel(self)
-        self.progressText.move(10, 175)
+        self.progressText.move(10, 215)
         self.progressText.resize(560, 30)
         self.progressText.setText('')
 
     def msgUI(self):
         self.msgLabel = QLabel(self)
-        self.msgLabel.move(10, 180)
+        self.msgLabel.move(10, 220)
         self.msgLabel.resize(260,30)
         self.msgLabel.setAlignment(Qt.AlignCenter)
         self.msgLabel.setVisible(False)
@@ -206,7 +232,7 @@ class Window(QWidget):
     def copyUI(self):
         self.copyBtn = QPushButton(self)
         self.copyBtn.setText('Copy')
-        self.copyBtn.move(100, 230)
+        self.copyBtn.move(100, 270)
         self.copyBtn.resize(60, 26)
         self.copyBtn.clicked.connect(self.copyFolders)
 
@@ -353,7 +379,7 @@ class Window(QWidget):
                     self.msgWorker = None
 
                 self.msgWorker = MoverWorker(self)
-                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked())
+                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked())
                 self.msgWorker.finished.connect(self.finishMoverWorker)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)
