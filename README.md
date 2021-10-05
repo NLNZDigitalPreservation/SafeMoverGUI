@@ -11,7 +11,7 @@ pip install tqdm PyQt5
 ![image](img/package.png)
 ## Usage
 ### With command line
-`python3 mover.py source=<source path> dest=<dest path> logs=<log file> checksum=<checksum>`
+`python3 mover.py source=<source path> dest=<dest path> logs=<log file> checksum=<checksum> checkDuplicate=True rmDuplicate=False rename=True exclusive=''`
 - If path contains space, add `\`(unix) or `/`(windows) before space.
 - Available checksume algorithms: md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s.
 ### With GUI

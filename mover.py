@@ -298,7 +298,10 @@ class Mover():
         self.hash_list = []
         self.threadStop = False
         start_time = time.time()
-        exclude_files = exclusive.split(',')
+        if exclusive == None or exclusive == '':
+            exclude_files = []
+        else:
+            exclude_files = exclusive.split(',')
         QT = False
         if 'logger' in kwargs and kwargs['logger'] != None:
             kwargs['logger'].emit(self.transformText('Read files in {}'.format(source), 28))
@@ -478,6 +481,10 @@ if __name__ == '__main__':
         try:
             params = sys.argv[i+1].split('=', 1)
             commands[params[0]] = params[1]
+            if params[1] == 'True':
+                commands[params[0]] = True
+            elif params[1] == 'False':
+                commands[params[0]] = False
         except Exception as e:
             print(e)
     mover = Mover()
