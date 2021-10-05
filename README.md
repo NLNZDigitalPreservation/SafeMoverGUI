@@ -27,7 +27,7 @@ You can open log.csv to review the details of the moving records.
 
 ## Todo
 - ~~On/Off - filename cleaning (currently on)~~
-- On/Off - exclude files
+- ~~On/Off - exclude files~~
 - Multithread moving files
 - ~~Retry when failed~~
 - Deploy mover.py into Pypi, then SafeMoverGUI.py can run independently

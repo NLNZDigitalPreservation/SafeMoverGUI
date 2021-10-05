@@ -42,9 +42,10 @@ class MoverWorker(QThread):
         self.checkDuplicate = False
         self.rmDuplicate = False
         self.rename = True
+        self.exclusive = ''
         self.mover = mover.Mover()
 
-    def setParams(self, source, dest, logs, algo, checkDuplicate, rmDuplicate, autoRename, disRename):
+    def setParams(self, source, dest, logs, algo, checkDuplicate, rmDuplicate, autoRename, disRename, exclusive):
         self.source = source
         self.dest = dest
         self.logs = logs
@@ -55,11 +56,12 @@ class MoverWorker(QThread):
             self.rename = True
         if disRename:
             self.rename = False
+        self.exclusive = exclusive
 
     @pyqtSlot()
     def run(self):
         self.mover.terminate(False)
-        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rmDuplicate, self.rename, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
+        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rmDuplicate, self.rename, self.exclusive, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
         self.finished.emit()
 
     def terminate(self):
@@ -80,12 +82,13 @@ class Window(QWidget):
 
         self.setWindowTitle('Safe Mover')
         self.setFixedWidth(580)
-        self.setFixedHeight(320)
+        self.setFixedHeight(350)
 
         self.algoSelector()
         self.SourceDestUI()
         self.duplicateUI()
         self.nameCleanUI()
+        self.fileExclusion()
         self.logsUI()
         self.progressBar()
         self.msgUI()
@@ -176,6 +179,17 @@ class Window(QWidget):
         self.cleanBtnGrp.addButton(self.autoCleanBtn, 1)
         self.cleanBtnGrp.addButton(self.disCleanBtn, 2)        
 
+    def fileExclusion(self):
+        self.excludeLabel = QLabel('Exclusive', self)
+        self.excludeLabel.move(10, 220)
+        self.excludeLabel.resize(80, 26)
+
+        self.excludeInput = QLineEdit(self)
+        self.excludeInput.setStyleSheet("border: 1px solid grey; border-radius: 5px;")
+        self.excludeInput.setPlaceholderText('*.exe,*.txt')
+        self.excludeInput.move(100, 220)
+        self.excludeInput.resize(120, 30)
+
     def logsUI(self):
         self.logsPath = mover.Mover().convertPath(os.getcwd()+'/logs.csv')
         self.logsLabel = QLabel('Logs', self)
@@ -202,29 +216,29 @@ class Window(QWidget):
         self.log_text_box.setReadOnly(True)
         self.log_text_box.setLineWrapMode(QPlainTextEdit.NoWrap)
         self.log_text_box.move(300, 10)
-        self.log_text_box.resize(260, 160)
+        self.log_text_box.resize(260, 320)
 
     def progressBar(self):
         self.pBar = QProgressBar(self)
-        self.pBar.setGeometry(10, 245, 240, 20)
+        self.pBar.setGeometry(10, 275, 240, 20)
         self.pBar.setStyleSheet("QProgressBar::chunk {background-color: green;}")
         self.pBar.setStyleSheet("QProgressBar {background-color: transparent; border: 1px solid grey; border-radius: 5px;}")
         self.pBar.setAlignment(Qt.AlignCenter)
         self.pBar.setVisible(False)
 
         self.ETA = QLabel(self)
-        self.ETA.move(260, 245)
+        self.ETA.move(260, 275)
         self.ETA.resize(120, 20)
         self.ETA.setText('')
 
         self.progressText = QLabel(self)
-        self.progressText.move(10, 215)
+        self.progressText.move(10, 245)
         self.progressText.resize(560, 30)
         self.progressText.setText('')
 
     def msgUI(self):
         self.msgLabel = QLabel(self)
-        self.msgLabel.move(10, 220)
+        self.msgLabel.move(10, 250)
         self.msgLabel.resize(260,30)
         self.msgLabel.setAlignment(Qt.AlignCenter)
         self.msgLabel.setVisible(False)
@@ -232,7 +246,7 @@ class Window(QWidget):
     def copyUI(self):
         self.copyBtn = QPushButton(self)
         self.copyBtn.setText('Copy')
-        self.copyBtn.move(100, 270)
+        self.copyBtn.move(100, 300)
         self.copyBtn.resize(60, 26)
         self.copyBtn.clicked.connect(self.copyFolders)
 
@@ -379,7 +393,7 @@ class Window(QWidget):
                     self.msgWorker = None
 
                 self.msgWorker = MoverWorker(self)
-                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked())
+                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked(), self.excludeInput.text())
                 self.msgWorker.finished.connect(self.finishMoverWorker)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)
