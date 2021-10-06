@@ -156,13 +156,15 @@ class Window(QWidget):
         self.d1.resize(80,26)
 
         self.d2 = QCheckBox("Keep Only One", self)
+        self.d2.setVisible(False)
         self.d2.move(175, 165)
         self.d2.resize(130,26)
 
     def nameCleanUI(self):
-        self.cleanLabel = QLabel('Rename', self)
+        self.cleanLabel = QLabel('Filename Cleaning', self)
+        self.cleanLabel.setWordWrap(True)
         self.cleanLabel.move(10, 190)
-        self.cleanLabel.resize(80, 26)
+        self.cleanLabel.resize(80, 35)
 
         self.autoCleanBtn = QRadioButton(self)
         self.autoCleanBtn.setText('Auto')
@@ -181,17 +183,17 @@ class Window(QWidget):
 
     def fileExclusion(self):
         self.excludeLabel = QLabel('Exclusive', self)
-        self.excludeLabel.move(10, 220)
+        self.excludeLabel.move(10, 225)
         self.excludeLabel.resize(80, 26)
 
         self.excludeInput = QLineEdit(self)
         self.excludeInput.setStyleSheet("border: 1px solid grey; border-radius: 5px;")
         self.excludeInput.setPlaceholderText('*.exe,*.txt')
-        self.excludeInput.move(100, 220)
+        self.excludeInput.move(100, 225)
         self.excludeInput.resize(120, 30)
 
     def logsUI(self):
-        self.logsPath = mover.Mover().convertPath(os.getcwd()+'/logs.csv')
+        self.logsPath = mover.Mover().convertPath(os.getcwd())
         self.logsLabel = QLabel('Logs', self)
         self.logsLabel.move(10, 130)
         self.logsLabel.resize(80,30)
@@ -220,34 +222,34 @@ class Window(QWidget):
 
     def progressBar(self):
         self.pBar = QProgressBar(self)
-        self.pBar.setGeometry(10, 275, 240, 20)
+        self.pBar.setGeometry(10, 280, 200, 20)
         self.pBar.setStyleSheet("QProgressBar::chunk {background-color: green;}")
         self.pBar.setStyleSheet("QProgressBar {background-color: transparent; border: 1px solid grey; border-radius: 5px;}")
         self.pBar.setAlignment(Qt.AlignCenter)
         self.pBar.setVisible(False)
 
         self.ETA = QLabel(self)
-        self.ETA.move(260, 275)
+        self.ETA.move(220, 280)
         self.ETA.resize(120, 20)
         self.ETA.setText('')
 
         self.progressText = QLabel(self)
-        self.progressText.move(10, 245)
+        self.progressText.move(10, 250)
         self.progressText.resize(560, 30)
         self.progressText.setText('')
 
     def msgUI(self):
         self.msgLabel = QLabel(self)
-        self.msgLabel.move(10, 250)
+        self.msgLabel.move(10, 255)
         self.msgLabel.resize(260,30)
         self.msgLabel.setAlignment(Qt.AlignCenter)
         self.msgLabel.setVisible(False)
 
     def copyUI(self):
         self.copyBtn = QPushButton(self)
-        self.copyBtn.setText('Copy')
-        self.copyBtn.move(100, 300)
-        self.copyBtn.resize(60, 26)
+        self.copyBtn.setText('Start')
+        self.copyBtn.move(90, 305)
+        self.copyBtn.resize(80, 36)
         self.copyBtn.clicked.connect(self.copyFolders)
 
     def iconFromBase64(self, base64):
@@ -281,6 +283,11 @@ class Window(QWidget):
                 os.system(f'start {os.path.realpath(filepath)}')
             else:
                 os.system('xdg-open "%s"' % filepath)
+        else:
+            if platform.system() == 'Windows':
+                os.system(f'start {os.path.realpath(os.getcwd())}')
+            else:
+                os.system('xdg-open "%s"' % os.getcwd())
 
     def destSelector(self):
         self.destPath = self.getOpenFilesAndDirs()
@@ -298,13 +305,17 @@ class Window(QWidget):
                 os.system(f'start {os.path.realpath(filepath)}')
             else:
                 os.system('xdg-open "%s"' % filepath)
+        else:
+            if platform.system() == 'Windows':
+                os.system(f'start {os.path.realpath(os.getcwd())}')
+            else:
+                os.system('xdg-open "%s"' % os.getcwd())
+            
 
     def logsSelector(self):
-        self.logsPath = self.getOpenFilesAndDirs()
+        self.logsPath = self.getOpenDirs()
         if len(self.logsPath) > 0:
-            self.logsPath = self.logsPath[0]
-            if os.path.isdir(mover.Mover().convertPath(self.logsPath)):
-                self.logsPath += '/log.csv' 
+            self.logsPath = self.logsPath[0] 
             self.logsInput.setText(mover.Mover().convertPath(self.logsPath))
     
     def logsOpen(self):
@@ -327,6 +338,35 @@ class Window(QWidget):
 
         dialog = QFileDialog(parent, windowTitle=caption)
         dialog.setFileMode(dialog.ExistingFiles)
+        if options:
+            dialog.setOptions(options)
+        dialog.setOption(dialog.DontUseNativeDialog, True)
+        if directory:
+            dialog.setDirectory(directory)
+        if filter:
+            dialog.setNameFilter(filter)
+            if initialFilter:
+                dialog.selectNameFilter(initialFilter)
+        dialog.accept = lambda: QDialog.accept(dialog)
+        stackedWidget = dialog.findChild(QStackedWidget)
+        view = stackedWidget.findChild(QListView)
+        view.selectionModel().selectionChanged.connect(updateText)
+
+        lineEdit = dialog.findChild(QLineEdit)
+        dialog.directoryEntered.connect(lambda: lineEdit.setText(''))
+
+        dialog.exec_()
+        return dialog.selectedFiles()
+
+    def getOpenDirs(parent=None, caption='', directory='', filter='', initialFilter='', options=None):
+        def updateText():
+            selected = []
+            for index in view.selectionModel().selectedRows():
+                selected.append('{}'.format(index.data()))
+            lineEdit.setText(' '.join(selected))
+
+        dialog = QFileDialog(parent, windowTitle=caption)
+        dialog.setFileMode(dialog.DirectoryOnly)
         if options:
             dialog.setOptions(options)
         dialog.setOption(dialog.DontUseNativeDialog, True)

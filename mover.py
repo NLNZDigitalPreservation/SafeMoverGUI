@@ -279,7 +279,7 @@ class Mover():
                     if checksum1 == checksum2 and modify1 == modify2 and size1 == size2:
                         if QT:
                             QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
-                        log_line = 	['SUCCES', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
+                        log_line = 	['SUCCESS', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
                         self.hash_list.append({'source':source, 'hash':checksum1})
                     else:
                         if QT:
@@ -292,7 +292,7 @@ class Mover():
             pass
         return (QTprogressText, QTlogger, skip, log_line, duplicate_log, exclude_log)
 
-    def move(self, source, dest, logs='logs.csv', checksum='md5', checkDuplicate=False, rmDuplicate=False, rename=True, exclusive='', **kwargs):
+    def move(self, source, dest, logs='logs', checksum='md5', checkDuplicate=False, rmDuplicate=False, rename=True, exclusive='', **kwargs):
         self.success_files = []
         self.failed_files = []
         self.hash_list = []
@@ -326,17 +326,22 @@ class Mover():
 
         source_file_num, source_folder_num = self.countFileFolder(source)
 
-        log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_file_permission', 'Dest_file_permission', 'Source_modified_date', 'Dest_modified_date', 'Modified_check', 'Source_created_date', 'Dest_created_date', 'Source_accessed_date', 'Dest_accessed_date']
-        logFile = open(logs, "w")
+        log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_permission', 'Dest_permission', 'Source_Modified_Date', 'Dest_Modified_Date', 'Modified_Date_check', 'Source_Created_Date', 'Dest_Created_Date', 'Source_Accessed_Date', 'Dest_Accessed_Date']
+        try:
+            logFile = open(logs+'/transfer_log.csv', "w")
+        except:
+            if 'progressText' in kwargs and kwargs['progressText'] != None:
+                kwargs['progressText'].emit('transfer_log.csv is opened')
+            return
         writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
         writer.writerow(log_line)
         t = tqdm(map(self.copyFile, [(lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate, rmDuplicate) for i in range(size)]), total=size)
         duplicate_log = []
         exclude_log = []
         for i in t:
-            if i[0] != None:
+            if i[0] != None and 'progressText' in kwargs and kwargs['progressText'] != None:
                 kwargs['progressText'].emit(i[0])
-            if i[1] != None:
+            if i[1] != None and 'logger' in kwargs and kwargs['logger'] != None:
                 kwargs['logger'].emit(i[1])
             if i[3] != []:
                 writer.writerow(i[3])
@@ -412,21 +417,31 @@ class Mover():
                     break
             retry -= 1
 
+        logFile.close()
+
         if checkDuplicate or rmDuplicate:
-            writer.writerow([])
-            writer.writerow([])
-            writer.writerow(['Duplicate files'])
+            try:
+                logFile = open(logs+'/duplication_log.csv', "w")
+            except:
+                if 'progressText' in kwargs and kwargs['progressText'] != None:
+                    kwargs['progressText'].emit('duplication_log.csv is opened')
+                return
+            writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
             writer.writerow(['Source', 'Hash_method', 'Hash', 'Duplicate file'])
             writer.writerows(duplicate_log)
+            logFile.close()
 
         if len(exclude_files) > 0:
-            writer.writerow([])
-            writer.writerow([])
-            writer.writerow(['Exclusive files'])
+            try:
+                logFile = open(logs+'/exclusive_log.csv', "w")
+            except:
+                if 'progressText' in kwargs and kwargs['progressText'] != None:
+                    kwargs['progressText'].emit('exclusive_log.csv is opened')
+                return
             writer.writerow(['Source'])
             writer.writerows(exclude_log)
+            logFile.close()
 
-        logFile.close()
         end_time = time.time() 
         
         dest_file_num, dest_folder_num = self.countFileFolder(dest)
@@ -434,18 +449,19 @@ class Mover():
             kwargs['logger'].emit('######################')
             kwargs['logger'].emit('Summary')
             kwargs['logger'].emit('Executed %.2f seconds' % (end_time - start_time))
-            kwargs['logger'].emit('Source files number {}'.format(source_file_num))
-            kwargs['logger'].emit('Dest files number {}'.format(dest_file_num))
-            kwargs['logger'].emit('Source folders number {}'.format(source_folder_num))
-            kwargs['logger'].emit('Dest folders number {}'.format(dest_folder_num))
-            kwargs['logger'].emit('Success to copy {} files'.format(len(self.success_files)))
-            kwargs['logger'].emit('Failed to copy {} files'.format(len(self.failed_files)))
+            kwargs['logger'].emit('Number of files in Source: {}'.format(source_file_num))
+            kwargs['logger'].emit('Number of files in Dest: {}'.format(dest_file_num))
+            kwargs['logger'].emit('Number of folders in Source: {}'.format(source_folder_num))
+            kwargs['logger'].emit('Number of folders in Dest: {}'.format(dest_folder_num))
+            kwargs['logger'].emit('Files copied succesfully: {}'.format(len(self.success_files)))
+            if len(self.failed_files) > 0:
+                kwargs['logger'].emit('Files copied failed: {}'.format(len(self.failed_files)))
             if checkDuplicate:
-                kwargs['logger'].emit('Check {} duplicate files'.format(len(duplicate_log)))
+                kwargs['logger'].emit('Number of duplicates found: {}'.format(len(duplicate_log)))
             if rmDuplicate:
-                kwargs['logger'].emit('Skip {} duplicate files'.format(len(duplicate_log)))
+                kwargs['logger'].emit('Number of removed duplicates: {}'.format(len(duplicate_log)))
             if len(exclude_files) > 0:
-                kwargs['logger'].emit('Exclude {} files'.format(len(exclude_log)))
+                kwargs['logger'].emit('Number of exclusive files: {}'.format(len(exclude_log)))
             if len(self.failed_files) > 0:
                 kwargs['logger'].emit('Failed files:')
                 for item in self.failed_files:
@@ -462,18 +478,19 @@ class Mover():
                 print('   {}'.format(self.transformText(self.extractPath(item, source), 48)))
             print('Summary')
             print('Executed %.2f seconds' % (end_time - start_time))
-            print('Source files number {}'.format(source_file_num))
-            print('Dest files number {}'.format(dest_file_num))
-            print('Source folders number {}'.format(source_folder_num))
-            print('Dest folders number {}'.format(dest_folder_num))
-            print('Success to copy {} files'.format(len(self.success_files)))
-            print('Failed to copy {} files'.format(len(self.failed_files)))
+            print('Number of files in Source: {}'.format(source_file_num))
+            print('Number of files in Dest: {}'.format(dest_file_num))
+            print('Number of folders in Source: {}'.format(source_folder_num))
+            print('Number of folders in Dest: {}'.format(dest_folder_num))
+            print('Files copied succesfully: {}'.format(len(self.success_files)))
+            if len(self.failed_files) > 0:
+                print('Files copied failed: {}'.format(len(self.failed_files)))
             if checkDuplicate:
-                print('Check {} duplicate files'.format(len(duplicate_log)))
+                print('Number of duplicates found: {}'.format(len(duplicate_log)))
             if rmDuplicate:
-                print('Skip {} duplicate files'.format(len(duplicate_log)))
+                print('Number of removed duplicates: {}'.format(len(duplicate_log)))
             if len(exclude_files) > 0:
-                print('Exclude {} files'.format(len(exclude_log)))
+                print('Number of exclusive files: {}'.format(len(exclude_log)))
 
 if __name__ == '__main__':
     commands = {'source': '', 'dest': '', 'logs': 'logs.csv', 'checksum': 'md5', 'checkDuplicate': False, 'rmDuplicate': False, 'rename': True, 'exclusive':''}
