@@ -245,19 +245,21 @@ class Mover():
         log_line = []
         duplicate_log = []
         exclude_log = []
+        skip_log = []
+        change_log = []
         checkDuplicate = False
         rmDuplicate = False
-        skip = False
+        exclude = False
         try:
             source = params[0]
             dest = params[1]
-            skip = params[2]
+            exclude = params[2]
             checksum = params[3]
             sourcePath = params[4]
             QT = params[5]
             checkDuplicate = params[6]
             rmDuplicate = params[7]
-            if skip:
+            if exclude:
                 exclude_log = [source]
             else:
                 if QT:
@@ -272,14 +274,25 @@ class Mover():
                 else:
                     if checkDuplicate and (not rmDuplicate)and len(duplicateFile) > 0:
                         duplicate_log = [source, checksum, checksum1, duplicateFile[0]['source']]
-                    self.copy(source, dest)
-                    checksum2 = self.getFileHash(dest, checksum)
                     access1, modify1, create1, mode1, size1 = self.getMetadata(source)
-                    access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
+                    if os.path.exists(dest):
+                        checksum2 = self.getFileHash(dest, checksum)
+                        access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
+                        if checksum1 == checksum2 and modify1 == modify2 and mode1 == mode2 and size1 == size2:
+                            skip_log = [source, dest]
+                        else:
+                            change_log = [source, dest, checksum1, checksum2, modify1, modify2, mode1, mode2, size1, size2]
+                            self.copy(source, dest)
+                            checksum2 = self.getFileHash(dest, checksum)
+                            access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
+                    else:
+                        self.copy(source, dest)
+                        checksum2 = self.getFileHash(dest, checksum)
+                        access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
                     if checksum1 == checksum2 and modify1 == modify2 and size1 == size2:
                         if QT:
                             QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
-                        log_line = 	['SUCCESS', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
+                        log_line = 	['SUCCESS', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, mode1 == mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
                         self.hash_list.append({'source':source, 'hash':checksum1})
                     else:
                         if QT:
@@ -290,7 +303,7 @@ class Mover():
                 QTlogger = self.transformText('{}'.format(self.extractPath(source, source)), 28)
             log_line = 	['FAILED', t, source, dest, self.filenameCheck(source, dest), '', '', '','','', '', '', '', '', '', '', '', '', '', '', '']
             pass
-        return (QTprogressText, QTlogger, skip, log_line, duplicate_log, exclude_log)
+        return (QTprogressText, QTlogger, exclude, log_line, duplicate_log, exclude_log, skip_log, change_log)
 
     def move(self, source, dest, logs='logs', checksum='md5', checkDuplicate=False, rmDuplicate=False, rename=True, exclusive='', **kwargs):
         self.success_files = []
@@ -326,7 +339,7 @@ class Mover():
 
         source_file_num, source_folder_num = self.countFileFolder(source)
 
-        log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_permission', 'Dest_permission', 'Source_Modified_Date', 'Dest_Modified_Date', 'Modified_Date_check', 'Source_Created_Date', 'Dest_Created_Date', 'Source_Accessed_Date', 'Dest_Accessed_Date']
+        log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_permission', 'Dest_permission', 'Permission_check', 'Source_Modified_Date', 'Dest_Modified_Date', 'Modified_Date_check', 'Source_Created_Date', 'Dest_Created_Date', 'Source_Accessed_Date', 'Dest_Accessed_Date']
         try:
             logFile = open(logs+'/transfer_log.csv', "w")
         except:
@@ -338,6 +351,8 @@ class Mover():
         t = tqdm(map(self.copyFile, [(lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate, rmDuplicate) for i in range(size)]), total=size)
         duplicate_log = []
         exclude_log = []
+        skip_log = []
+        change_log = []
         for i in t:
             if i[0] != None and 'progressText' in kwargs and kwargs['progressText'] != None:
                 kwargs['progressText'].emit(i[0])
@@ -349,6 +364,10 @@ class Mover():
                 duplicate_log.append(i[4])
             if i[5] != []:
                 exclude_log.append(i[5])
+            if i[6] != []:
+                skip_log.append(i[6])
+            if i[7] != []:
+                change_log.append(i[7])
             s = str(t).split()
             if len(s) > 4:
                 count = int(s[2].split('/')[0])
@@ -394,6 +413,10 @@ class Mover():
                     duplicate_log.append(i[4])
                 if i[5] != []:
                     exclude_log.append(i[5])
+                if i[6] != []:
+                    skip_log.append(i[6])
+                if i[7] != []:
+                    change_log.append(i[7])
                 s = str(t).split()
                 if len(s) > 4:
                     count = int(s[2].split('/')[0])
@@ -422,28 +445,53 @@ class Mover():
         if checkDuplicate or rmDuplicate:
             try:
                 logFile = open(logs+'/duplication_log.csv', "w")
+                writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
+                writer.writerow(['Source', 'Hash_method', 'Hash', 'Duplicate file'])
+                writer.writerows(duplicate_log)
+                logFile.close()
             except:
                 if 'progressText' in kwargs and kwargs['progressText'] != None:
                     kwargs['progressText'].emit('duplication_log.csv is opened')
                 return
-            writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
-            writer.writerow(['Source', 'Hash_method', 'Hash', 'Duplicate file'])
-            writer.writerows(duplicate_log)
-            logFile.close()
+            
 
         if len(exclude_files) > 0:
             try:
                 logFile = open(logs+'/exclusive_log.csv', "w")
+                writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
+                writer.writerow(['Source_path'])
+                writer.writerows(exclude_log)
+                logFile.close()
             except:
                 if 'progressText' in kwargs and kwargs['progressText'] != None:
                     kwargs['progressText'].emit('exclusive_log.csv is opened')
                 return
-            writer.writerow(['Source'])
-            writer.writerows(exclude_log)
-            logFile.close()
+
+        if len(skip_log) > 0:
+            try:
+                logFile = open(logs+'/skip_log.csv', "w")
+                writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
+                writer.writerow(['Source_path', 'Dest_path'])
+                writer.writerows(skip_log)
+                logFile.close()
+            except:
+                if 'progressText' in kwargs and kwargs['progressText'] != None:
+                    kwargs['progressText'].emit('skip_log.csv is opened')
+                return
+
+        if len(change_log) > 0:
+            try:
+                logFile = open(logs+'/change_log.csv', "w")
+                writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
+                writer.writerow(['Source_path', 'Dest_path', 'Source_hash', 'Dest_hash', 'Source_Modified_Date', 'Dest_Modified_Date', 'Source_permission', 'Dest_permission', 'Source_size', 'Dest_size'])
+                writer.writerows(change_log)
+                logFile.close()
+            except:
+                if 'progressText' in kwargs and kwargs['progressText'] != None:
+                    kwargs['progressText'].emit('change_log.csv is opened')
+                return
 
         end_time = time.time() 
-        
         dest_file_num, dest_folder_num = self.countFileFolder(dest)
         if 'logger' in kwargs and kwargs['logger'] != None:
             kwargs['logger'].emit('######################')
@@ -455,7 +503,11 @@ class Mover():
             kwargs['logger'].emit('Number of folders in Dest: {}'.format(dest_folder_num))
             kwargs['logger'].emit('Files copied succesfully: {}'.format(len(self.success_files)))
             if len(self.failed_files) > 0:
-                kwargs['logger'].emit('Files copied failed: {}'.format(len(self.failed_files)))
+                kwargs['logger'].emit('Files not copied: {}'.format(len(self.failed_files)))
+            if len(skip_log) > 0:
+                kwargs['logger'].emit('Files without changes: {}'.format(len(skip_log)))
+            if len(change_log) > 0:
+                kwargs['logger'].emit('Files copied with changes: {}'.format(len(change_log)))
             if checkDuplicate:
                 kwargs['logger'].emit('Number of duplicates found: {}'.format(len(duplicate_log)))
             if rmDuplicate:
@@ -466,6 +518,7 @@ class Mover():
                 kwargs['logger'].emit('Failed files:')
                 for item in self.failed_files:
                     kwargs['logger'].emit('   {}'.format(self.transformText(self.extractPath(item, source), 24)))
+            kwargs['logger'].emit('######################')
         if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
             kwargs['updateProgressQT'].emit(100)
         if 'logger' not in kwargs:
@@ -485,6 +538,10 @@ class Mover():
             print('Files copied succesfully: {}'.format(len(self.success_files)))
             if len(self.failed_files) > 0:
                 print('Files copied failed: {}'.format(len(self.failed_files)))
+            if len(skip_log) > 0:
+                print('Files without changes: {}'.format(len(skip_log)))
+            if len(change_log) > 0:
+                print('Files copied with changes: {}'.format(len(change_log)))
             if checkDuplicate:
                 print('Number of duplicates found: {}'.format(len(duplicate_log)))
             if rmDuplicate:

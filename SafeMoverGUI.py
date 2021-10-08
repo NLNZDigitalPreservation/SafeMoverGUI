@@ -67,6 +67,103 @@ class MoverWorker(QThread):
     def terminate(self):
         self.mover.terminate(True)
 
+class CheckableComboBox(QComboBox):
+    class Delegate(QStyledItemDelegate):
+        def sizeHint(self, option, index):
+            size = super().sizeHint(option, index)
+            size.setHeight(20)
+            return size
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setEditable(True)
+        self.lineEdit().setReadOnly(True)
+        palette = qApp.palette()
+        palette.setBrush(QPalette.Base, palette.button())
+        self.lineEdit().setPalette(palette)
+        self.setItemDelegate(CheckableComboBox.Delegate())
+        self.lineEdit().installEventFilter(self)
+        self.closeOnLineEditClick = False
+        self.view().viewport().installEventFilter(self)
+
+    def resizeEvent(self, event):
+        self.updateText()
+        super().resizeEvent(event)
+
+    def eventFilter(self, object, event):
+        if object == self.lineEdit():
+            if event.type() == QEvent.MouseButtonRelease:
+                if self.closeOnLineEditClick:
+                    self.hidePopup()
+                else:
+                    self.showPopup()
+                return True
+            return False
+
+        if object == self.view().viewport():
+            if event.type() == QEvent.MouseButtonRelease:
+                index = self.view().indexAt(event.pos())
+                item = self.model().item(index.row())
+
+                if item.checkState() == Qt.Checked:
+                    item.setCheckState(Qt.Unchecked)
+                else:
+                    item.setCheckState(Qt.Checked)
+                return True
+        return False
+
+    def showPopup(self):
+        super().showPopup()
+        self.closeOnLineEditClick = True
+
+    def hidePopup(self):
+        super().hidePopup()
+        self.startTimer(100)
+        self.updateText()
+
+    def timerEvent(self, event):
+        self.killTimer(event.timerId())
+        self.closeOnLineEditClick = False
+
+    def updateText(self):
+        texts = []
+        for i in range(self.model().rowCount()):
+            if self.model().item(i).checkState() == Qt.Checked:
+                texts.append(self.model().item(i).text())
+        text = ",".join(texts)
+        metrics = QFontMetrics(self.lineEdit().font())
+        elidedText = metrics.elidedText(text, Qt.ElideRight, self.lineEdit().width())
+        self.lineEdit().setText(elidedText)
+
+    def setPlaceholderText(self, placeholder):
+        self.lineEdit().setPlaceholderText(placeholder)
+
+    def addItem(self, text, data=None):
+        item = QStandardItem()
+        item.setText(text)
+        if data is None:
+            item.setData(text)
+        else:
+            item.setData(data)
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+        item.setData(Qt.Unchecked, Qt.CheckStateRole)
+        self.model().appendRow(item)
+
+    def addItems(self, texts, datalist=None):
+        for i, text in enumerate(texts):
+            try:
+                data = datalist[i]
+            except (TypeError, IndexError):
+                data = None
+            self.addItem(text, data)
+
+    def text(self):
+        res = []
+        for i in range(self.model().rowCount()):
+            if self.model().item(i).checkState() == Qt.Checked:
+                res.append(self.model().item(i).data())
+        return res
+
 class Window(QWidget):
     def __init__(self):
         super().__init__()
@@ -186,11 +283,17 @@ class Window(QWidget):
         self.excludeLabel.move(10, 225)
         self.excludeLabel.resize(80, 26)
 
-        self.excludeInput = QLineEdit(self)
-        self.excludeInput.setStyleSheet("border: 1px solid grey; border-radius: 5px;")
-        self.excludeInput.setPlaceholderText('*.exe,*.txt')
+        # self.excludeInput = QLineEdit(self)
+        # self.excludeInput.setStyleSheet("border: 1px solid grey; border-radius: 5px;")
+        # self.excludeInput.setPlaceholderText('*.exe,*.txt')
+        # self.excludeInput.move(100, 225)
+        # self.excludeInput.resize(120, 30)
+        exclusive = ['hidden/system files', '.thumbs_db', '.exe']
+        self.excludeInput = CheckableComboBox(self)
+        self.excludeInput.addItems(exclusive)
+        self.excludeInput.setPlaceholderText('Empty')
         self.excludeInput.move(100, 225)
-        self.excludeInput.resize(120, 30)
+        self.excludeInput.resize(195, 30)
 
     def logsUI(self):
         self.logsPath = mover.Mover().convertPath(os.getcwd())
@@ -407,7 +510,7 @@ class Window(QWidget):
 
     def finishMoverWorker(self):
         self.setCopyFlag(False)
-        self.copyBtn.setText('Copy')
+        self.copyBtn.setText('Start')
         self.pBar.setVisible(False)
         self.ETA.setText('')
         self.progressText.setText('')
@@ -417,9 +520,16 @@ class Window(QWidget):
         self.msgLabel.setVisible(False)
         self.msgLabel.setText('')
 
+    def exclusiveConvert(self, lists):
+        pattern = {'hidden/system files':'**/.*','.thumbs_db':'**.thumbs_db','.exe':'**.exe'}
+        exclusive = []
+        for item in lists:
+            exclusive.append(pattern[item])
+        return ','.join(exclusive)
+
     def copyFolders(self):
         if self.copyFlag:
-            self.copyBtn.setText('Copy')
+            self.copyBtn.setText('Start')
             self.pBar.setVisible(False)
             self.copyFlag = False
             if self.msgWorker:
@@ -433,7 +543,7 @@ class Window(QWidget):
                     self.msgWorker = None
 
                 self.msgWorker = MoverWorker(self)
-                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked(), self.excludeInput.text())
+                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked(), self.exclusiveConvert(self.excludeInput.text()))
                 self.msgWorker.finished.connect(self.finishMoverWorker)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)
