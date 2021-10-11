@@ -1,7 +1,17 @@
-import sys, string, os, shutil, time, stat, platform, csv, math, fnmatch
-import ntpath
+import sys, string, os, shutil, time, stat, platform, csv, math, fnmatch, ntpath, threading
 from hashlib import md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s
 from tqdm import tqdm
+
+class ThreadWithReturnValue(threading.Thread):
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}, Verbose=None):
+        threading.Thread.__init__(self, group, target, name, args, kwargs)
+        self._return = None
+    def run(self):
+        if self._target is not None:
+            self._return = self._target(*self._args, **self._kwargs)
+    def join(self, *args):
+        threading.Thread.join(self, *args)
+        return self._return
 
 class Mover():
     def __init__(self):
@@ -9,6 +19,7 @@ class Mover():
         self.failed_files = []
         self.hash_list = []
         self.threadStop = False
+        self.lock = threading.Lock()
 
     def string_cleaner(self, original_str):
         clean_string = str(original_str)
@@ -17,11 +28,13 @@ class Mover():
         return clean_string
 
     def illegal_chars_handler(self, original_str):
-        special_chars = ['?','<','>',':','*','|','^']
+        special_chars = ['?','<','>',':','*','|','^',' ']
         printable = set(string.printable)
         replace_chars = {ord(c):'_' for c in special_chars}
         final_str = [original_str.translate(replace_chars), original_str[:2]+original_str[2:].translate(replace_chars)][platform.system() == 'Windows']
         final_str = ''.join(filter(lambda x: x in printable, final_str))
+        count = final_str.count('.')-1
+        final_str = final_str.replace('.','_',count)
         return final_str
 
     def getListOfFiles(self, root_path):
@@ -248,7 +261,6 @@ class Mover():
         skip_log = []
         change_log = []
         checkDuplicate = False
-        rmDuplicate = False
         exclude = False
         try:
             source = params[0]
@@ -258,7 +270,6 @@ class Mover():
             sourcePath = params[4]
             QT = params[5]
             checkDuplicate = params[6]
-            rmDuplicate = params[7]
             if exclude:
                 exclude_log = [source]
             else:
@@ -268,36 +279,35 @@ class Mover():
                     print('Copying {}'.format(self.transformText(source, 48)))
                 t = time.ctime()
                 checksum1 = self.getFileHash(source, checksum)
-                duplicateFile = self.findDuplicate(self.hash_list, checksum1)
-                if rmDuplicate and len(duplicateFile) > 0:
-                    duplicate_log = [source, checksum, checksum1, duplicateFile[0]['source']]
-                else:
-                    if checkDuplicate and (not rmDuplicate)and len(duplicateFile) > 0:
-                        duplicate_log = [source, checksum, checksum1, duplicateFile[0]['source']]
-                    access1, modify1, create1, mode1, size1 = self.getMetadata(source)
-                    if os.path.exists(dest):
-                        checksum2 = self.getFileHash(dest, checksum)
-                        access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
-                        if checksum1 == checksum2 and modify1 == modify2 and mode1 == mode2 and size1 == size2:
-                            skip_log = [source, dest]
-                        else:
-                            change_log = [source, dest, checksum1, checksum2, modify1, modify2, mode1, mode2, size1, size2]
-                            self.copy(source, dest)
-                            checksum2 = self.getFileHash(dest, checksum)
-                            access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
+                access1, modify1, create1, mode1, size1 = self.getMetadata(source)
+                if os.path.exists(dest):
+                    checksum2 = self.getFileHash(dest, checksum)
+                    access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
+                    if checksum1 == checksum2 and modify1 == modify2 and mode1 == mode2 and size1 == size2:
+                        skip_log = [source, dest]
                     else:
+                        change_log = [source, dest, checksum1, checksum2, modify1, modify2, mode1, mode2, size1, size2]
                         self.copy(source, dest)
                         checksum2 = self.getFileHash(dest, checksum)
                         access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
-                    if checksum1 == checksum2 and modify1 == modify2 and size1 == size2:
-                        if QT:
-                            QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
-                        log_line = 	['SUCCESS', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, mode1 == mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
-                        self.hash_list.append({'source':source, 'hash':checksum1})
-                    else:
-                        if QT:
-                            QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
-                        log_line = 	['FAILED', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
+                else:
+                    self.copy(source, dest)
+                    checksum2 = self.getFileHash(dest, checksum)
+                    access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
+                if checksum1 == checksum2 and modify1 == modify2 and size1 == size2:
+                    if QT:
+                        QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
+                    log_line = 	['SUCCESS', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, mode1 == mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
+                    with self.lock:
+                        duplicateFile = self.findDuplicate(self.hash_list, checksum1)
+                        if checkDuplicate and len(duplicateFile) > 0:
+                            duplicate_log = [source, checksum, checksum1, duplicateFile[0]['source']]
+                        else:
+                            self.hash_list.append({'source':source, 'hash':checksum1})
+                else:
+                    if QT:
+                        QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
+                    log_line = 	['FAILED', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
         except:
             if QT:
                 QTlogger = self.transformText('{}'.format(self.extractPath(source, source)), 28)
@@ -305,7 +315,7 @@ class Mover():
             pass
         return (QTprogressText, QTlogger, exclude, log_line, duplicate_log, exclude_log, skip_log, change_log)
 
-    def move(self, source, dest, logs='logs', checksum='md5', checkDuplicate=False, rmDuplicate=False, rename=True, exclusive='', **kwargs):
+    def move(self, source, dest, logs='logs', checksum='md5', checkDuplicate=False, rename=True, exclusive='', **kwargs):
         self.success_files = []
         self.failed_files = []
         self.hash_list = []
@@ -348,7 +358,12 @@ class Mover():
             return
         writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
         writer.writerow(log_line)
-        t = tqdm(map(self.copyFile, [(lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate, rmDuplicate) for i in range(size)]), total=size)
+        threads = list()
+        for i in range(size):
+            t = ThreadWithReturnValue(target=self.copyFile, args=((lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate),))
+            threads.append(t)
+            t.start()
+        t = tqdm((thread.join() for index, thread in enumerate(threads)), total=size)
         duplicate_log = []
         exclude_log = []
         skip_log = []
@@ -401,7 +416,12 @@ class Mover():
             lists = self.getFailedList(self.failed_files, source, dest, rename)
             self.failed_files = []
             size = len(lists)
-            t = tqdm(map(self.copyFile, [(lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate, rmDuplicate) for i in range(size)]), total=size)
+            threads = list()
+            for i in range(size):
+                t = ThreadWithReturnValue(target=self.copyFile, args=((lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate),))
+                threads.append(t)
+                t.start()
+            t = tqdm((thread.join() for index, thread in enumerate(threads)), total=size)
             for i in t:
                 if i[0] != None:
                     kwargs['progressText'].emit(i[0])
@@ -442,7 +462,7 @@ class Mover():
 
         logFile.close()
 
-        if checkDuplicate or rmDuplicate:
+        if checkDuplicate:
             try:
                 logFile = open(logs+'/duplication_log.csv', "w")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
@@ -510,8 +530,6 @@ class Mover():
                 kwargs['logger'].emit('Files copied with changes: {}'.format(len(change_log)))
             if checkDuplicate:
                 kwargs['logger'].emit('Number of duplicates found: {}'.format(len(duplicate_log)))
-            if rmDuplicate:
-                kwargs['logger'].emit('Number of removed duplicates: {}'.format(len(duplicate_log)))
             if len(exclude_files) > 0:
                 kwargs['logger'].emit('Number of exclusive files: {}'.format(len(exclude_log)))
             if len(self.failed_files) > 0:
@@ -544,13 +562,11 @@ class Mover():
                 print('Files copied with changes: {}'.format(len(change_log)))
             if checkDuplicate:
                 print('Number of duplicates found: {}'.format(len(duplicate_log)))
-            if rmDuplicate:
-                print('Number of removed duplicates: {}'.format(len(duplicate_log)))
             if len(exclude_files) > 0:
                 print('Number of exclusive files: {}'.format(len(exclude_log)))
 
 if __name__ == '__main__':
-    commands = {'source': '', 'dest': '', 'logs': 'logs.csv', 'checksum': 'md5', 'checkDuplicate': False, 'rmDuplicate': False, 'rename': True, 'exclusive':''}
+    commands = {'source': '', 'dest': '', 'logs': 'logs.csv', 'checksum': 'md5', 'checkDuplicate': False, 'rename': True, 'exclusive':''}
     for i in range(len(sys.argv)-1):
         try:
             params = sys.argv[i+1].split('=', 1)
@@ -562,4 +578,4 @@ if __name__ == '__main__':
         except Exception as e:
             print(e)
     mover = Mover()
-    mover.move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], commands['checkDuplicate'], commands['rmDuplicate'], commands['rename'], commands['exclusive'])
+    mover.move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], commands['checkDuplicate'], commands['rename'], commands['exclusive'])
