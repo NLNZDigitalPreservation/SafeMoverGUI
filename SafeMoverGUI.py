@@ -40,18 +40,16 @@ class MoverWorker(QThread):
         self.ETA = self.signals.ETA
         self.progressText = self.signals.progressText
         self.checkDuplicate = False
-        self.rmDuplicate = False
         self.rename = True
         self.exclusive = ''
         self.mover = mover.Mover()
 
-    def setParams(self, source, dest, logs, algo, checkDuplicate, rmDuplicate, autoRename, disRename, exclusive):
+    def setParams(self, source, dest, logs, algo, checkDuplicate, autoRename, disRename, exclusive):
         self.source = source
         self.dest = dest
         self.logs = logs
         self.algo = algo
         self.checkDuplicate = checkDuplicate
-        self.rmDuplicate = rmDuplicate
         if autoRename:
             self.rename = True
         if disRename:
@@ -61,7 +59,7 @@ class MoverWorker(QThread):
     @pyqtSlot()
     def run(self):
         self.mover.terminate(False)
-        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rmDuplicate, self.rename, self.exclusive, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
+        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rename, self.exclusive, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
         self.finished.emit()
 
     def terminate(self):
@@ -543,7 +541,7 @@ class Window(QWidget):
                     self.msgWorker = None
 
                 self.msgWorker = MoverWorker(self)
-                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.d2.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked(), self.exclusiveConvert(self.excludeInput.text()))
+                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked(), self.exclusiveConvert(self.excludeInput.text()))
                 self.msgWorker.finished.connect(self.finishMoverWorker)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)
