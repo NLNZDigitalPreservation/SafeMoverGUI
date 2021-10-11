@@ -274,7 +274,7 @@ class Mover():
                 exclude_log = [source]
             else:
                 if QT:
-                    QTprogressText = 'Copying {}'.format(self.transformText(source, 24))
+                    QTprogressText = 'Copying {}'.format(self.transformText(source, 34))
                 else: 
                     print('Copying {}'.format(self.transformText(source, 48)))
                 t = time.ctime()
@@ -296,7 +296,7 @@ class Mover():
                     access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
                 if checksum1 == checksum2 and modify1 == modify2 and size1 == size2:
                     if QT:
-                        QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
+                        QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 36)
                     log_line = 	['SUCCESS', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, mode1 == mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
                     with self.lock:
                         duplicateFile = self.findDuplicate(self.hash_list, checksum1)
@@ -306,11 +306,11 @@ class Mover():
                             self.hash_list.append({'source':source, 'hash':checksum1})
                 else:
                     if QT:
-                        QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 28)
+                        QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 36)
                     log_line = 	['FAILED', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
         except:
             if QT:
-                QTlogger = self.transformText('{}'.format(self.extractPath(source, source)), 28)
+                QTlogger = self.transformText('{}'.format(self.extractPath(source, source)), 36)
             log_line = 	['FAILED', t, source, dest, self.filenameCheck(source, dest), '', '', '','','', '', '', '', '', '', '', '', '', '', '', '']
             pass
         return (QTprogressText, QTlogger, exclude, log_line, duplicate_log, exclude_log, skip_log, change_log)
@@ -321,21 +321,23 @@ class Mover():
         self.hash_list = []
         self.threadStop = False
         start_time = time.time()
+        if os.path.isdir(logs) is not True:
+            os.makedirs(logs)
         if exclusive == None or exclusive == '':
             exclude_files = []
         else:
             exclude_files = exclusive.split(',')
         QT = False
         if 'logger' in kwargs and kwargs['logger'] != None:
-            kwargs['logger'].emit(self.transformText('Read files in {}'.format(source), 28))
+            kwargs['logger'].emit(self.transformText('Read files in {}'.format(source), 36))
             QT = True
         else:
-            print(self.transformText('Read files in {}'.format(source), 28))
+            print(self.transformText('Read files in {}'.format(source), 48))
         if 'progressText' in kwargs and kwargs['progressText'] != None:
-            kwargs['progressText'].emit(self.transformText('Reading source file/folder ...', 28))
+            kwargs['progressText'].emit(self.transformText('Reading source file/folder ...', 36))
             QT = True
         else:
-            print(self.transformText('Reading source file/folder ...', 28))
+            print(self.transformText('Reading source file/folder ...', 48))
         if 'ETA' in kwargs and kwargs['ETA'] != None:
             kwargs['ETA'].emit('-')
             QT = True
@@ -355,6 +357,8 @@ class Mover():
         except:
             if 'progressText' in kwargs and kwargs['progressText'] != None:
                 kwargs['progressText'].emit('transfer_log.csv is opened')
+            else:
+                print('transfer_log.csv is opened')
             return
         writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
         writer.writerow(log_line)
@@ -472,19 +476,23 @@ class Mover():
             except:
                 if 'progressText' in kwargs and kwargs['progressText'] != None:
                     kwargs['progressText'].emit('duplication_log.csv is opened')
+                else:
+                    print('duplication_log.csv is opened')
                 return
             
 
         if len(exclude_files) > 0:
             try:
-                logFile = open(logs+'/exclusive_log.csv', "w")
+                logFile = open(logs+'/exclude_log.csv', "w")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source_path'])
                 writer.writerows(exclude_log)
                 logFile.close()
             except:
                 if 'progressText' in kwargs and kwargs['progressText'] != None:
-                    kwargs['progressText'].emit('exclusive_log.csv is opened')
+                    kwargs['progressText'].emit('exclude_log.csv is opened')
+                else:
+                    print('exclude_log.csv is opened')
                 return
 
         if len(skip_log) > 0:
@@ -497,6 +505,8 @@ class Mover():
             except:
                 if 'progressText' in kwargs and kwargs['progressText'] != None:
                     kwargs['progressText'].emit('skip_log.csv is opened')
+                else:
+                    print('skip_log.csv is opened')
                 return
 
         if len(change_log) > 0:
@@ -509,6 +519,8 @@ class Mover():
             except:
                 if 'progressText' in kwargs and kwargs['progressText'] != None:
                     kwargs['progressText'].emit('change_log.csv is opened')
+                else:
+                    print('change_log.csv is opened')
                 return
 
         end_time = time.time() 
@@ -531,16 +543,16 @@ class Mover():
             if checkDuplicate:
                 kwargs['logger'].emit('Number of duplicates found: {}'.format(len(duplicate_log)))
             if len(exclude_files) > 0:
-                kwargs['logger'].emit('Number of exclusive files: {}'.format(len(exclude_log)))
+                kwargs['logger'].emit('Number of excluded files: {}'.format(len(exclude_log)))
             if len(self.failed_files) > 0:
                 kwargs['logger'].emit('Failed files:')
                 for item in self.failed_files:
-                    kwargs['logger'].emit('   {}'.format(self.transformText(self.extractPath(item, source), 24)))
+                    kwargs['logger'].emit('   {}'.format(self.transformText(self.extractPath(item, source), 32)))
             kwargs['logger'].emit('######################')
         if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
             kwargs['updateProgressQT'].emit(100)
         if 'logger' not in kwargs:
-            print('Copy {} to {} DONE!'.format(self.transformText(source, 28), self.transformText(dest, 28)))
+            print('Copy {} to {} DONE!'.format(self.transformText(source, 28), self.transformText(dest, 48)))
             print('Success:')
             for item in self.success_files:
                 print('   {}'.format(self.transformText(self.extractPath(item, source), 48)))
@@ -563,10 +575,10 @@ class Mover():
             if checkDuplicate:
                 print('Number of duplicates found: {}'.format(len(duplicate_log)))
             if len(exclude_files) > 0:
-                print('Number of exclusive files: {}'.format(len(exclude_log)))
+                print('Number of excluded files: {}'.format(len(exclude_log)))
 
 if __name__ == '__main__':
-    commands = {'source': '', 'dest': '', 'logs': 'logs.csv', 'checksum': 'md5', 'checkDuplicate': False, 'rename': True, 'exclusive':''}
+    commands = {'source': '', 'dest': '', 'logs': 'logs', 'checksum': 'md5', 'checkDuplicate': False, 'filenameClean': True, 'exclude':''}
     for i in range(len(sys.argv)-1):
         try:
             params = sys.argv[i+1].split('=', 1)
@@ -578,4 +590,4 @@ if __name__ == '__main__':
         except Exception as e:
             print(e)
     mover = Mover()
-    mover.move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], commands['checkDuplicate'], commands['rename'], commands['exclusive'])
+    mover.move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], commands['checkDuplicate'], commands['filenameClean'], commands['exclude'])
