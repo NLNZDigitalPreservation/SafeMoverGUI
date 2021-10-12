@@ -184,6 +184,7 @@ class Window(QWidget):
         self.duplicateUI()
         self.nameCleanUI()
         self.fileExclusion()
+        self.threadUI()
         self.logsUI()
         self.progressBar()
         self.msgUI()
@@ -242,36 +243,36 @@ class Window(QWidget):
 
     def duplicateUI(self):
         self.dupliLabel = QLabel('Duplication', self)
-        self.dupliLabel.move(20, 185)
+        self.dupliLabel.move(20, 175)
         self.dupliLabel.resize(80,26)
 
         self.d1 = QCheckBox("Identify", self)
         self.d1.setChecked(True)
-        self.d1.move(110, 185)
+        self.d1.move(110, 175)
         self.d1.resize(100,26)
 
         self.d2 = QCheckBox("Keep Only One", self)
         self.d2.setVisible(False)
-        self.d2.move(225, 185)
+        self.d2.move(225, 175)
         self.d2.resize(150,26)
 
     def nameCleanUI(self):
         self.cleanLabel = QLabel('Filename Cleaning', self)
         self.cleanLabel.setWordWrap(True)
-        self.cleanLabel.move(20, 220)
+        self.cleanLabel.move(20, 200)
         self.cleanLabel.resize(80, 35)
         self.cleanLabel.setToolTip('Clean illegal characters in filename')
 
         self.autoCleanBtn = QRadioButton(self)
         self.autoCleanBtn.setText('Auto')
         self.autoCleanBtn.setChecked(True)
-        self.autoCleanBtn.move(110, 220)
+        self.autoCleanBtn.move(110, 205)
         self.autoCleanBtn.resize(80, 30)
         self.autoCleanBtn.setToolTip('Auto clean illegal characters in filename')
 
         self.disCleanBtn = QRadioButton(self)
         self.disCleanBtn.setText('Disabled')
-        self.disCleanBtn.move(190, 220)
+        self.disCleanBtn.move(190, 205)
         self.disCleanBtn.resize(100, 30)
         self.disCleanBtn.setToolTip('Disable clean illegal characters in filename')
 
@@ -281,7 +282,7 @@ class Window(QWidget):
 
     def fileExclusion(self):
         self.excludeLabel = QLabel('Exclude', self)
-        self.excludeLabel.move(20, 270)
+        self.excludeLabel.move(20, 240)
         self.excludeLabel.resize(80, 26)
 
         # self.excludeInput = QLineEdit(self)
@@ -293,8 +294,22 @@ class Window(QWidget):
         self.excludeInput = CheckableComboBox(self)
         self.excludeInput.addItems(exclusive)
         self.excludeInput.setPlaceholderText('Empty')
-        self.excludeInput.move(110, 270)
+        self.excludeInput.move(110, 240)
         self.excludeInput.resize(215, 30)
+
+    def threadUI(self):
+        self.threadLabel = QLabel('Thread Number', self)
+        self.threadLabel.move(20, 270)
+        self.threadLabel.resize(80, 35)
+        self.threadLabel.setWordWrap(True)
+
+        self.threadInput = QLineEdit(self)
+        self.threadInput.setStyleSheet("border: 1px solid grey; border-radius: 5px;")
+        self.threadInput.setText('10')
+        self.threadInput.move(110, 275)
+        self.threadInput.resize(215, 30)
+        self.threadInput.setValidator(QIntValidator())
+        self.threadInput.setToolTip('Integer larger than 0')
 
     def logsUI(self):
         self.logsPath = mover.Mover().convertPath(os.getcwd())
@@ -538,7 +553,7 @@ class Window(QWidget):
                 self.ETA.setText('')
                 self.progressText.setText('')
         else:
-            if self.sourcePath != '' and (os.path.isdir(self.sourcePath) or os.path.isfile(self.sourcePath)) and self.destPath != '' and self.logsPath != '':
+            if self.sourcePath != '' and (os.path.isdir(self.sourcePath) or os.path.isfile(self.sourcePath)) and self.destPath != '' and self.logsPath != '' and self.threadInput.text() != '' and int(self.threadInput.text()) > 0:
                 if self.msgWorker:
                     self.msgWorker.quit()
                     self.msgWorker = None
@@ -566,8 +581,10 @@ class Window(QWidget):
                 self.msgWorker = Worker(self)
                 self.msgWorker.setDelay(5)
                 self.msgWorker.finished.connect(self.finishWorker)
-
-                self.msgLabel.setText('Please select correct folders/files')
+                if self.threadInput.text() == '' or int(self.threadInput.text()) <= 0:
+                    self.msgLabel.setText('Please input positive thread number')
+                else:
+                    self.msgLabel.setText('Please select correct folders/files')
                 self.msgLabel.setStyleSheet('color: red;')
                 self.msgLabel.setVisible(True)
 

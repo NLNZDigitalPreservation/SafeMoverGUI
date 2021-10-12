@@ -1,17 +1,7 @@
 import sys, string, os, shutil, time, stat, platform, csv, math, fnmatch, ntpath, threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from hashlib import md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s
 from tqdm import tqdm
-
-class ThreadWithReturnValue(threading.Thread):
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}, Verbose=None):
-        threading.Thread.__init__(self, group, target, name, args, kwargs)
-        self._return = None
-    def run(self):
-        if self._target is not None:
-            self._return = self._target(*self._args, **self._kwargs)
-    def join(self, *args):
-        threading.Thread.join(self, *args)
-        return self._return
 
 class Mover():
     def __init__(self):
@@ -315,7 +305,7 @@ class Mover():
             pass
         return (QTprogressText, QTlogger, exclude, log_line, duplicate_log, exclude_log, skip_log, change_log)
 
-    def move(self, source, dest, logs='logs', checksum='md5', checkDuplicate=False, rename=True, exclusive='', **kwargs):
+    def move(self, source, dest, logs='logs', checksum='md5', checkDuplicate=False, rename=True, exclusive='', threadnum=10, **kwargs):
         self.success_files = []
         self.failed_files = []
         self.hash_list = []
@@ -363,11 +353,11 @@ class Mover():
         writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
         writer.writerow(log_line)
         threads = list()
+        threadPool = ThreadPoolExecutor(max_workers=threadnum)
         for i in range(size):
-            t = ThreadWithReturnValue(target=self.copyFile, args=((lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate),))
+            t = threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate))
             threads.append(t)
-            t.start()
-        t = tqdm((thread.join() for index, thread in enumerate(threads)), total=size)
+        t = tqdm((thread.result() for thread in as_completed(threads)), total=size)
         duplicate_log = []
         exclude_log = []
         skip_log = []
@@ -421,11 +411,11 @@ class Mover():
             self.failed_files = []
             size = len(lists)
             threads = list()
+            threadPool = ThreadPoolExecutor(max_workers=workers)
             for i in range(size):
-                t = ThreadWithReturnValue(target=self.copyFile, args=((lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate),))
+                t = threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate))
                 threads.append(t)
-                t.start()
-            t = tqdm((thread.join() for index, thread in enumerate(threads)), total=size)
+            t = tqdm((thread.result() for thread in as_completed(threads)), total=size)
             for i in t:
                 if i[0] != None:
                     kwargs['progressText'].emit(i[0])
@@ -464,6 +454,7 @@ class Mover():
                     break
             retry -= 1
 
+        threadPool.shutdown()
         logFile.close()
 
         if checkDuplicate:
@@ -578,7 +569,7 @@ class Mover():
                 print('Number of excluded files: {}'.format(len(exclude_log)))
 
 if __name__ == '__main__':
-    commands = {'source': '', 'dest': '', 'logs': 'logs', 'checksum': 'md5', 'checkDuplicate': False, 'filenameClean': True, 'exclude':''}
+    commands = {'source': '', 'dest': '', 'logs': 'logs', 'checksum': 'md5', 'checkDuplicate': False, 'filenameClean': True, 'exclude':'', 'threadnum': 10}
     for i in range(len(sys.argv)-1):
         try:
             params = sys.argv[i+1].split('=', 1)
@@ -590,4 +581,4 @@ if __name__ == '__main__':
         except Exception as e:
             print(e)
     mover = Mover()
-    mover.move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], commands['checkDuplicate'], commands['filenameClean'], commands['exclude'])
+    mover.move(commands['source'], commands['dest'], commands['logs'], commands['checksum'], commands['checkDuplicate'], commands['filenameClean'], commands['exclude'], commands['threadnum'])
