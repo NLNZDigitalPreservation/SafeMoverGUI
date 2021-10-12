@@ -11,11 +11,11 @@ pip install tqdm PyQt5
 ![image](img/package.png)
 ## Usage
 ### With command line
-`python3 mover.py source=<source path> dest=<dest path> logs=<log folder path> checksum=<checksum> checkDuplicate=<True|False> filenameClean=<True|False> exclusive=''`
+`python3 mover.py source=<source path> dest=<dest path> logs=<log folder path> checksum=<checksum> checkDuplicate=<True|False> filenameClean=<True|False> exclusive='' threadnum=<number>`
 - If path contains space, add `\`(unix) or `/`(windows) before space.
 - Available checksume algorithms: md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s.
-- Default value: logs=logs, checksum=md5, checkDuplicate=False, filenameClean=True
-- Example: `python3 mover.py source=/home/test dest=/home/test1 logs=/home/logs checksume=md5 checkDuplicate=False filenameClean=True` if the parameters are not set, default value will be used.
+- Default value: logs=logs, checksum=md5, checkDuplicate=False, filenameClean=True, threadnum=10
+- Example: `python3 mover.py source=/home/test dest=/home/test1 logs=/home/logs checksume=md5 checkDuplicate=False filenameClean=True threadnum=10` if the parameters are not set, default value will be used.
 ### With GUI
 - Double click `SafeMoverGUI.py` to open as python application. 
 - Choose checksum method.
