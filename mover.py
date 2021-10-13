@@ -368,7 +368,7 @@ class Mover():
                 kwargs['progressText'].emit(i[0])
             if i[1] != None and 'logger' in kwargs and kwargs['logger'] != None:
                 kwargs['logger'].emit(i[1])
-            if i[3] != []:
+            if i[3] != [] and i[3][0] == 'SUCCESS':
                 writer.writerow(i[3])
             if i[4] != []:
                 duplicate_log.append(i[4])
