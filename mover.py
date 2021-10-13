@@ -342,8 +342,9 @@ class Mover():
         source_file_num, source_folder_num = self.countFileFolder(source)
 
         log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_permission', 'Dest_permission', 'Permission_check', 'Source_Modified_Date', 'Dest_Modified_Date', 'Modified_Date_check', 'Source_Created_Date', 'Dest_Created_Date', 'Source_Accessed_Date', 'Dest_Accessed_Date']
+        current_time = time.strftime('%Y%m%d%H%M%S')
         try:
-            logFile = open(logs+'/transfer_log.csv', "w")
+            logFile = open(logs+'/transfer_log('+current_time+').csv', "w")
         except:
             if 'progressText' in kwargs and kwargs['progressText'] != None:
                 kwargs['progressText'].emit('transfer_log.csv is opened')
@@ -367,7 +368,7 @@ class Mover():
                 kwargs['progressText'].emit(i[0])
             if i[1] != None and 'logger' in kwargs and kwargs['logger'] != None:
                 kwargs['logger'].emit(i[1])
-            if i[3] != []:
+            if i[3] != [] and i[3][0] == 'SUCCESS':
                 writer.writerow(i[3])
             if i[4] != []:
                 duplicate_log.append(i[4])
@@ -411,9 +412,9 @@ class Mover():
             self.failed_files = []
             size = len(lists)
             threads = list()
-            threadPool = ThreadPoolExecutor(max_workers=workers)
+            threadPool = ThreadPoolExecutor(max_workers=threadnum)
             for i in range(size):
-                t = threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate))
+                t = threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], False, checksum, source, QT, checkDuplicate))
                 threads.append(t)
             t = tqdm((thread.result() for thread in as_completed(threads)), total=size)
             for i in t:
@@ -459,7 +460,7 @@ class Mover():
 
         if checkDuplicate:
             try:
-                logFile = open(logs+'/duplication_log.csv', "w")
+                logFile = open(logs+'/duplication_log('+current_time+').csv', "w")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source', 'Hash_method', 'Hash', 'Duplicate file'])
                 writer.writerows(duplicate_log)
@@ -474,7 +475,7 @@ class Mover():
 
         if len(exclude_files) > 0:
             try:
-                logFile = open(logs+'/exclude_log.csv', "w")
+                logFile = open(logs+'/exclude_log('+current_time+').csv', "w")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source_path'])
                 writer.writerows(exclude_log)
@@ -488,7 +489,7 @@ class Mover():
 
         if len(skip_log) > 0:
             try:
-                logFile = open(logs+'/skip_log.csv', "w")
+                logFile = open(logs+'/skip_log('+current_time+').csv', "w")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source_path', 'Dest_path'])
                 writer.writerows(skip_log)
@@ -502,7 +503,7 @@ class Mover():
 
         if len(change_log) > 0:
             try:
-                logFile = open(logs+'/change_log.csv', "w")
+                logFile = open(logs+'/change_log('+current_time+').csv', "w")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source_path', 'Dest_path', 'Source_hash', 'Dest_hash', 'Source_Modified_Date', 'Dest_Modified_Date', 'Source_permission', 'Dest_permission', 'Source_size', 'Dest_size'])
                 writer.writerows(change_log)
