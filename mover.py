@@ -342,7 +342,7 @@ class Mover():
         source_file_num, source_folder_num = self.countFileFolder(source)
 
         log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_permission', 'Dest_permission', 'Permission_check', 'Source_Modified_Date', 'Dest_Modified_Date', 'Modified_Date_check', 'Source_Created_Date', 'Dest_Created_Date', 'Source_Accessed_Date', 'Dest_Accessed_Date']
-        current_time = time.strftime('%Y%m%d %H:%M:%S')
+        current_time = time.strftime('%Y%m%d%H%M%S')
         try:
             logFile = open(logs+'/transfer_log('+current_time+').csv', "w")
         except:
@@ -414,7 +414,7 @@ class Mover():
             threads = list()
             threadPool = ThreadPoolExecutor(max_workers=threadnum)
             for i in range(size):
-                t = threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate))
+                t = threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], False, checksum, source, QT, checkDuplicate))
                 threads.append(t)
             t = tqdm((thread.result() for thread in as_completed(threads)), total=size)
             for i in t:
