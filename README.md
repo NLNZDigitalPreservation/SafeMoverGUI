@@ -27,6 +27,10 @@ You can open log.csv to review the details of the moving records.
 ![image](img/SafeMover.png)
 ![image](img/FileStructure.png)
 
+
+## Unit tests
+`python3 -m unittest discover tests`
+
 ## Todo
 - ~~On/Off - filename cleaning (currently on)~~
 - ~~On/Off - exclude files~~
