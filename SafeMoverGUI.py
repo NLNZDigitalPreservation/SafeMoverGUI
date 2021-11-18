@@ -264,7 +264,7 @@ class Window(QWidget):
         self.cleanLabel.setToolTip('Clean illegal characters in filename')
 
         self.autoCleanBtn = QRadioButton(self)
-        self.autoCleanBtn.setText('Auto')
+        self.autoCleanBtn.setText('Enabled')
         self.autoCleanBtn.setChecked(True)
         self.autoCleanBtn.move(110, 205)
         self.autoCleanBtn.resize(80, 30)
