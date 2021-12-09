@@ -1,7 +1,6 @@
-import sys, string, os, shutil, time, stat, platform, csv, math, fnmatch, ntpath, threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import sys, string, os, shutil, time, stat, platform, csv, math, fnmatch, ntpath
 from hashlib import md5, sha1, sha224, sha256, sha384, sha512, blake2b, blake2s
-from tqdm import tqdm
+from multiprocessing import Pool, Manager
 
 class Mover():
     def __init__(self):
@@ -9,7 +8,7 @@ class Mover():
         self.failed_files = []
         self.hash_list = []
         self.threadStop = False
-        self.lock = threading.Lock()
+        self.current_files = []
 
     def string_cleaner(self, original_str):
         clean_string = str(original_str)
@@ -166,9 +165,9 @@ class Mover():
                 path += '\\'
             length = len(path)
             if file[0:length] == path:
-                return file[length:]
+                return file[length:].replace('/','\\')
             else:
-                return file
+                return file.replace('/','\\')
         else:
             if path[-1] != '/':
                 path += '/'
@@ -179,9 +178,14 @@ class Mover():
                 return file
 
     def appendPath(self, file, path):
-        if path[-1] != '/':
-            path += '/'
-        return path+file
+        if platform.system() == 'Windows':
+            if path[-1] != '\\':
+                path += '\\'
+            return (path+file).replace('/','\\')
+        else:
+            if path[-1] != '/':
+                path += '/'
+            return path+file
 
     def copy(self, source, dest):
         try:
@@ -189,11 +193,11 @@ class Mover():
                 foldermode = stat.S_IMODE(os.stat(os.path.dirname(source)).st_mode)
                 os.makedirs(os.path.dirname(dest), mode = foldermode)
             shutil.copy2(source, dest)
-            self.success_files.append(source)
-            return True
+            #self.success_files.append(source)
+            return True, source
         except:
-            self.failed_files.append(source)
-            return False
+            #self.failed_files.append(source)
+            return False, source
 
     def compare(self, source, dest, checksum='md5'):
         checksum1 = self.getFileHash(source, checksum)
@@ -242,7 +246,7 @@ class Mover():
     def findDuplicate(self, hash_list, item):
         return [x for x in hash_list if x['hash'] == item ]
 
-    def copyFile(self, params):
+    def copyFile(self, shared, source, dest, exclude, checksum, sourcePath, QT, checkDuplicate):
         QTprogressText = None
         QTlogger = None
         log_line = []
@@ -252,21 +256,15 @@ class Mover():
         change_log = []
         checkDuplicate = False
         exclude = False
+        threadStop = shared['threadStop']
         try:
-            source = params[0]
-            dest = params[1]
-            exclude = params[2]
-            checksum = params[3]
-            sourcePath = params[4]
-            QT = params[5]
-            checkDuplicate = params[6]
-            if exclude:
+            if exclude or threadStop:
                 exclude_log = [source]
             else:
                 if QT:
-                    QTprogressText = 'Copying {}'.format(self.transformText(source, 34))
+                    QTprogressText = 'Copied {}'.format(self.transformText(source, 34))
                 else: 
-                    print('Copying {}'.format(self.transformText(source, 48)))
+                    print('Copied {}'.format(self.transformText(source, 48)))
                 t = time.ctime()
                 checksum1 = self.getFileHash(source, checksum)
                 access1, modify1, create1, mode1, size1 = self.getMetadata(source)
@@ -277,10 +275,20 @@ class Mover():
                         skip_log = [source, dest]
                     else:
                         change_log = [source, dest, checksum1, checksum2, modify1, modify2, mode1, mode2, size1, size2]
-                        self.copy(source, dest)
+                        current_files = shared['current_files']
+                        current_files.append(dest)
+                        shared['current_files'] = current_files
+                        flag, p = self.copy(source, dest)
+                        if flag:
+                            shared['success_files'].append(p)
+                        else:
+                            shared['failed_files'].append(p)
                         checksum2 = self.getFileHash(dest, checksum)
                         access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
                 else:
+                    current_files = shared['current_files']
+                    current_files.append(dest)
+                    shared['current_files'] = current_files
                     self.copy(source, dest)
                     checksum2 = self.getFileHash(dest, checksum)
                     access2, modify2, create2, mode2, size2 = self.getMetadata(dest)
@@ -288,12 +296,19 @@ class Mover():
                     if QT:
                         QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 36)
                     log_line = 	['SUCCESS', t, source, dest, self.filenameCheck(source, dest), checksum, checksum1, checksum2, checksum1 == checksum2, size1, size2, size1 == size2, mode1, mode2, mode1 == mode2, modify1, modify2, modify1 == modify2, create1, create2, access1, access2]
-                    with self.lock:
-                        duplicateFile = self.findDuplicate(self.hash_list, checksum1)
-                        if checkDuplicate and len(duplicateFile) > 0:
-                            duplicate_log = [source, checksum, checksum1, duplicateFile[0]['source']]
-                        else:
-                            self.hash_list.append({'source':source, 'hash':checksum1})
+                    hash_list = shared['hash_list']
+                    duplicateFile = self.findDuplicate(hash_list, checksum1)
+                    if checkDuplicate and len(duplicateFile) > 0:
+                        duplicate_log = [source, checksum, checksum1, duplicateFile[0]['source']]
+                    else:
+                        hash_list.append({'source':source, 'hash':checksum1})
+                        shared['hash_list'] = hash_list
+                    try:
+                        current_files = shared['current_files']
+                        current_files.remove(dest)
+                        shared['current_files'] = current_files
+                    except:
+                        pass
                 else:
                     if QT:
                         QTlogger = self.transformText('{}'.format(self.extractPath(source, sourcePath)), 36)
@@ -304,6 +319,27 @@ class Mover():
             log_line = 	['FAILED', t, source, dest, self.filenameCheck(source, dest), '', '', '','','', '', '', '', '', '', '', '', '', '', '', '']
             pass
         return (QTprogressText, QTlogger, exclude, log_line, duplicate_log, exclude_log, skip_log, change_log)
+
+    def progressBar(self, value, size, used, estimated):
+        sys.stdout.write('\r')
+        sys.stdout.write("[%-50s](%d/%d) %d%% [%s<%s]" % (('='*int(value*(50/size)))+'>' if int(value) < int(size) else ('='*50), int(value), int(size), round(int(value)*100/int(size), 2), used, estimated))
+        sys.stdout.flush()
+
+    def formatExecuteTime(self, seconds, pct):
+        if seconds < 3600:
+            used = time.strftime('%M:%S', time.gmtime(seconds))
+        elif seconds < 86400:
+            used = time.strftime('%H:%M:%S', time.gmtime(seconds))
+        else:
+            used = time.strftime('%j days %H:%M:%S', time.gmtime(seconds-86400))
+        estimated_seconds = int((1-pct)*(seconds/pct))
+        if estimated_seconds < 3600:
+            estimated = time.strftime('%M:%S', time.gmtime(estimated_seconds))
+        elif estimated_seconds < 86400:
+            estimated = time.strftime('%H:%M:%S', time.gmtime(estimated_seconds))
+        else:
+            estimated = time.strftime('%j days %H:%M:%S', time.gmtime(estimated_seconds-86400))
+        return used, estimated
 
     def move(self, source, dest, logs='logs', checksum='md5', checkDuplicate=False, rename=True, exclusive='', threadnum=10, **kwargs):
         self.success_files = []
@@ -344,7 +380,7 @@ class Mover():
         log_line = 	['Status', 'Time', 'Source_path', 'Dest_path', 'Filename_check', 'Hash_method', 'Source_hash', 'Dest_hash', 'Hash_check', 'Source_size', 'Dest_size', 'Size_check', 'Source_permission', 'Dest_permission', 'Permission_check', 'Source_Modified_Date', 'Dest_Modified_Date', 'Modified_Date_check', 'Source_Created_Date', 'Dest_Created_Date', 'Source_Accessed_Date', 'Dest_Accessed_Date']
         current_time = time.strftime('%Y%m%d%H%M%S')
         try:
-            logFile = open(logs+'/transfer_log('+current_time+').csv', "w")
+            logFile = open(logs+'/transfer_log('+current_time+').csv', "a")
         except:
             if 'progressText' in kwargs and kwargs['progressText'] != None:
                 kwargs['progressText'].emit('transfer_log.csv is opened')
@@ -353,52 +389,116 @@ class Mover():
             return
         writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
         writer.writerow(log_line)
+        logFile.flush()
         threads = list()
-        threadPool = ThreadPoolExecutor(max_workers=threadnum)
+        manager = Manager()
+        shared = manager.dict()
+        shared['hash_list'] = self.hash_list
+        shared['current_files'] = self.current_files
+        shared['threadStop'] = self.threadStop
+        shared['success_files'] = self.success_files
+        shared['failed_files'] = self.failed_files
+        threadPool = Pool(threadnum)
+        start = time.time()
         for i in range(size):
-            t = threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate))
+            t = threadPool.apply_async(self.copyFile, (shared, lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate))
             threads.append(t)
-        t = tqdm((thread.result() for thread in as_completed(threads)), total=size)
+        # threadPool = ThreadPoolExecutor(max_workers=threadnum)
+        # for i in range(size):
+        #     t = self.threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate))
+        #     threads.append(t)
+        # t = tqdm((thread.result() for thread in as_completed(threads) if not self.threadStop), total=size)
         duplicate_log = []
         exclude_log = []
         skip_log = []
         change_log = []
-        for i in t:
-            if i[0] != None and 'progressText' in kwargs and kwargs['progressText'] != None:
-                kwargs['progressText'].emit(i[0])
-            if i[1] != None and 'logger' in kwargs and kwargs['logger'] != None:
-                kwargs['logger'].emit(i[1])
-            if i[3] != [] and i[3][0] == 'SUCCESS':
-                writer.writerow(i[3])
-            if i[4] != []:
-                duplicate_log.append(i[4])
-            if i[5] != []:
-                exclude_log.append(i[5])
-            if i[6] != []:
-                skip_log.append(i[6])
-            if i[7] != []:
-                change_log.append(i[7])
-            s = str(t).split()
-            if len(s) > 4:
-                count = int(s[2].split('/')[0])
-                remaining = s[3].split('<')[1][:-1]
-                if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
-                    kwargs['updateProgressQT'].emit(int((count)*100/size))
-                if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
-                    kwargs['ETA'].emit(remaining)
-            elif len(s) == 4:
-                count = int(s[1].split('/')[0])
-                remaining = s[2].split('<')[1][:-1]
-                if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
-                    kwargs['updateProgressQT'].emit(int((count)*100/size))
-                if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
-                    kwargs['ETA'].emit(remaining)
-            if self.threadStop:
-                # shutil.rmtree(dest)
-                # shutil.rmtree(logs)
-                t.close()
-                kwargs['progressText'].emit('Operation interrupted by user')
-                break
+        completed = 0
+        while completed < size:
+            tmp = []
+            shared['threadStop'] = self.threadStop
+            for pid, thread in enumerate(threads):
+                if self.threadStop:
+                    # shutil.rmtree(dest)
+                    # shutil.rmtree(logs)
+                    threadPool.terminate()
+                    self.current_files = shared['current_files']
+                    tmp = []
+                    for item in self.current_files:
+                        try:
+                            shutil.rmtree(item)
+                        except:
+                            pass
+                        try:
+                            os.remove(item)
+                        except:
+                            pass
+                        tmp.append(item)
+                    for item in tmp:
+                        self.current_files.remove(item)
+                    if 'progressText' in kwargs and kwargs['progressText'] != None:
+                        kwargs['progressText'].emit('Operation interrupted by user')
+                    if 'logger' in kwargs and kwargs['logger'] != None:
+                        kwargs['logger'].emit('Operation interrupted by user')
+                        kwargs['logger'].emit('Please wait for file cleaning')
+                    completed = size
+                    break
+                elif thread.ready():
+                    if thread.successful():
+                        try:
+                            i = thread.get()
+                            if i[0] != None and 'progressText' in kwargs and kwargs['progressText'] != None:
+                                kwargs['progressText'].emit(i[0])
+                            if i[1] != None and 'logger' in kwargs and kwargs['logger'] != None:
+                                kwargs['logger'].emit(i[1])
+                            if i[3] != [] and i[3][0] == 'SUCCESS':
+                                writer.writerow(i[3])
+                                logFile.flush()
+                            if i[4] != []:
+                                duplicate_log.append(i[4])
+                            if i[5] != []:
+                                exclude_log.append(i[5])
+                            if i[6] != []:
+                                skip_log.append(i[6])
+                            if i[7] != []:
+                                change_log.append(i[7])
+                            # s = str(self.t).split()
+                            # if len(s) > 4:
+                            #     count = int(s[2].split('/')[0])
+                            #     remaining = s[3].split('<')[1][:-1]
+                            #     if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
+                            #         kwargs['updateProgressQT'].emit(int((count)*100/size))
+                            #     if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
+                            #         kwargs['ETA'].emit(remaining)
+                            # elif len(s) == 4:
+                            #     count = int(s[1].split('/')[0])
+                            #     remaining = s[2].split('<')[1][:-1]
+                            #     if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
+                            #         kwargs['updateProgressQT'].emit(int((count)*100/size))
+                            #     if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
+                            #         kwargs['ETA'].emit(remaining)
+                            completed += 1
+                            end = time.time()
+                            used, estimated = self.formatExecuteTime(int(end-start), float(completed/size))
+                            self.progressBar(completed, size, used, estimated)
+                            if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
+                                    kwargs['updateProgressQT'].emit(round((completed)*100/size, 2))
+                            if 'ETA' in kwargs and kwargs['ETA'] != None:
+                                kwargs['ETA'].emit(estimated)
+                            tmp.append(thread)
+                        except:
+                            if 'logger' in kwargs and kwargs['logger'] != None:
+                                kwargs['logger'].emit('Something is going wrong')
+                            pass
+                time.sleep(0.1)
+            for item in tmp:
+                try:
+                    threads.remove(item)
+                except:
+                    pass
+        threadPool.close()
+
+        self.success_files = shared['success_files']
+        self.failed_files = shared['failed_files']
 
         retry = 3
         while len(self.failed_files) > 0 and retry > 0:
@@ -412,55 +512,89 @@ class Mover():
             self.failed_files = []
             size = len(lists)
             threads = list()
-            threadPool = ThreadPoolExecutor(max_workers=threadnum)
+            shared['hash_list'] = self.hash_list
+            shared['current_files'] = self.current_files
+            shared['threadStop'] = self.threadStop
+            shared['success_files'] = self.success_files
+            shared['failed_files'] = self.failed_files
+            threadPool = Pool(threadnum)
+            start = time.time()
             for i in range(size):
-                t = threadPool.submit(self.copyFile, (lists[i]['source'], lists[i]['dest'], False, checksum, source, QT, checkDuplicate))
+                t = threadPool.apply_async(self.copyFile, (shared, lists[i]['source'], lists[i]['dest'], lists[i]['skip'], checksum, source, QT, checkDuplicate))
                 threads.append(t)
-            t = tqdm((thread.result() for thread in as_completed(threads)), total=size)
-            for i in t:
-                if i[0] != None:
-                    kwargs['progressText'].emit(i[0])
-                if i[1] != None:
-                    kwargs['logger'].emit(i[1])
-                if i[3] != []:
-                    writer.writerow(i[3])
-                if i[4] != []:
-                    duplicate_log.append(i[4])
-                if i[5] != []:
-                    exclude_log.append(i[5])
-                if i[6] != []:
-                    skip_log.append(i[6])
-                if i[7] != []:
-                    change_log.append(i[7])
-                s = str(t).split()
-                if len(s) > 4:
-                    count = int(s[2].split('/')[0])
-                    remaining = s[3].split('<')[1][:-1]
-                    if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
-                        kwargs['updateProgressQT'].emit(int((count)*100/size))
-                    if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
-                        kwargs['ETA'].emit(remaining)
-                elif len(s) == 4:
-                    count = int(s[1].split('/')[0])
-                    remaining = s[2].split('<')[1][:-1]
-                    if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
-                        kwargs['updateProgressQT'].emit(int((count)*100/size))
-                    if 'ETA' in kwargs and kwargs['ETA'] != None and remaining != '?':
-                        kwargs['ETA'].emit(remaining)
-                if self.threadStop:
-                #     shutil.rmtree(dest)
-                #     shutil.rmtree(logs)
-                    t.close()
-                    kwargs['progressText'].emit('Operation interrupted by user')
-                    break
+            while completed < size:
+                tmp = []
+                for pid, thread in enumerate(threads):
+                    if self.threadStop:
+                        threadPool.terminate()
+                        self.current_files = shared['current_files']
+                        tmp = []
+                        for item in self.current_files:
+                            try:
+                                shutil.rmtree(item)
+                            except:
+                                pass
+                            try:
+                                os.remove(item)
+                            except:
+                                pass
+                            tmp.append(item)
+                        for item in tmp:
+                            self.current_files.remove(item)
+                        if 'progressText' in kwargs and kwargs['progressText'] != None:
+                            kwargs['progressText'].emit('Operation interrupted by user')
+                        if 'logger' in kwargs and kwargs['logger'] != None:
+                            kwargs['logger'].emit('Operation interrupted by user')
+                            kwargs['logger'].emit('Please wait for file cleaning')
+                        completed = size
+                        break
+                    elif thread.ready():
+                        if thread.successful():
+                            try:
+                                i = thread.get()
+                                if i[0] != None and 'progressText' in kwargs and kwargs['progressText'] != None:
+                                    kwargs['progressText'].emit(i[0])
+                                if i[1] != None and 'logger' in kwargs and kwargs['logger'] != None:
+                                    kwargs['logger'].emit(i[1])
+                                if i[3] != [] and i[3][0] == 'SUCCESS':
+                                    writer.writerow(i[3])
+                                    logFile.flush()
+                                if i[4] != []:
+                                    duplicate_log.append(i[4])
+                                if i[5] != []:
+                                    exclude_log.append(i[5])
+                                if i[6] != []:
+                                    skip_log.append(i[6])
+                                if i[7] != []:
+                                    change_log.append(i[7])
+                                completed += 1
+                                end = time.time()
+                                used, estimated = self.formatExecuteTime(int(end-start), float(completed/size))
+                                self.progressBar(completed, size, used, estimated)
+                                if 'updateProgressQT' in kwargs and kwargs['updateProgressQT'] != None:
+                                        kwargs['updateProgressQT'].emit(round((completed)*100/size, 2))
+                                if 'ETA' in kwargs and kwargs['ETA'] != None:
+                                    kwargs['ETA'].emit(estimated)
+                                tmp.append(thread)
+                            except:
+                                if 'logger' in kwargs and kwargs['logger'] != None:
+                                    kwargs['logger'].emit('Something is going wrong')
+                                pass
+                    time.sleep(0.1)
+                for item in tmp:
+                    try:
+                        threads.remove(item)
+                    except:
+                        pass
+            threadPool.close()    
             retry -= 1
-
-        threadPool.shutdown()
+        self.success_files = shared['success_files']
+        self.failed_files = shared['failed_files']
         logFile.close()
 
         if checkDuplicate:
             try:
-                logFile = open(logs+'/duplication_log('+current_time+').csv', "w")
+                logFile = open(logs+'/duplication_log('+current_time+').csv', "a")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source', 'Hash_method', 'Hash', 'Duplicate file'])
                 writer.writerows(duplicate_log)
@@ -475,7 +609,7 @@ class Mover():
 
         if len(exclude_files) > 0:
             try:
-                logFile = open(logs+'/exclude_log('+current_time+').csv', "w")
+                logFile = open(logs+'/exclude_log('+current_time+').csv', "a")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source_path'])
                 writer.writerows(exclude_log)
@@ -489,7 +623,7 @@ class Mover():
 
         if len(skip_log) > 0:
             try:
-                logFile = open(logs+'/skip_log('+current_time+').csv', "w")
+                logFile = open(logs+'/skip_log('+current_time+').csv', "a")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source_path', 'Dest_path'])
                 writer.writerows(skip_log)
@@ -503,7 +637,7 @@ class Mover():
 
         if len(change_log) > 0:
             try:
-                logFile = open(logs+'/change_log('+current_time+').csv', "w")
+                logFile = open(logs+'/change_log('+current_time+').csv', "a")
                 writer = csv.writer(logFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
                 writer.writerow(['Source_path', 'Dest_path', 'Source_hash', 'Dest_hash', 'Source_Modified_Date', 'Dest_Modified_Date', 'Source_permission', 'Dest_permission', 'Source_size', 'Dest_size'])
                 writer.writerows(change_log)

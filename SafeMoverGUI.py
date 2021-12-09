@@ -42,14 +42,16 @@ class MoverWorker(QThread):
         self.checkDuplicate = False
         self.rename = True
         self.exclusive = ''
+        self.threadNum = 1
         self.mover = mover.Mover()
 
-    def setParams(self, source, dest, logs, algo, checkDuplicate, autoRename, disRename, exclusive):
+    def setParams(self, source, dest, logs, algo, checkDuplicate, autoRename, disRename, exclusive, threadNum):
         self.source = source
         self.dest = dest
         self.logs = logs
         self.algo = algo
         self.checkDuplicate = checkDuplicate
+        self.threadNum = threadNum
         if autoRename:
             self.rename = True
         if disRename:
@@ -59,7 +61,7 @@ class MoverWorker(QThread):
     @pyqtSlot()
     def run(self):
         self.mover.terminate(False)
-        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rename, self.exclusive, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
+        self.mover.move(self.source, self.dest, self.logs, self.algo, self.checkDuplicate, self.rename, self.exclusive, self.threadNum, updateProgressQT=self.progress, logger=self.logger, ETA=self.ETA, progressText=self.progressText)
         self.finished.emit()
 
     def terminate(self):
@@ -559,7 +561,7 @@ class Window(QWidget):
                     self.msgWorker = None
 
                 self.msgWorker = MoverWorker(self)
-                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked(), self.exclusiveConvert(self.excludeInput.text()))
+                self.msgWorker.setParams(self.sourcePath, self.destPath, self.logsPath, self.selected_algo, self.d1.isChecked(), self.autoCleanBtn.isChecked(), self.disCleanBtn.isChecked(), self.exclusiveConvert(self.excludeInput.text()), int(self.threadInput.text()))
                 self.msgWorker.finished.connect(self.finishMoverWorker)
                 self.msgWorker.progress.connect(self.progressUpdate)
                 self.msgWorker.logger.connect(self.loggerHandler)
