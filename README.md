@@ -23,6 +23,8 @@ pip install tqdm PyQt5
 - Click 'Copy' button to start the process, the processing log will show on the right side and progress bar will show progress percentage. 
 - If you want to terminate the process, just click the 'Cancel' button to stop it, the destination folder/file and log file will be removed, be awared if your are overwriting destination folder, it will remove all of them.
 
+** Please set thread with a reasonable number, large number will exhaust all computer resource, set small thread number(2-4) if moving a lot of large size files.
+
 You can open log.csv to review the details of the moving records. 
 ![image](img/SafeMover.png)
 ![image](img/FileStructure.png)
@@ -34,7 +36,7 @@ You can open log.csv to review the details of the moving records.
 ## Todo
 - ~~On/Off - filename cleaning (currently on)~~
 - ~~On/Off - exclude files~~
-- Multithread moving files
+- ~~Multithread moving files~~
 - ~~Retry when failed~~
 - Deploy mover.py into Pypi, then SafeMoverGUI.py can run independently
 - ~~Identify duplication~~
